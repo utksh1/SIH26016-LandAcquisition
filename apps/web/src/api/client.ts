@@ -264,6 +264,53 @@ export interface WorkflowInstance {
   deadline_at?: string | null
   completed_at?: string | null
   lapsed_at?: string | null
+  responsible_department?: string | null
+  responsible_role?: string | null
+  stage_timeline_days?: number | null
+}
+
+export interface StageGateDecisionPayload {
+  user: string
+  decision?: 'APPROVE' | 'REJECT' | string
+  remarks?: string
+  documents?: string[]
+}
+
+export interface StageGateDecisionResponse {
+  success: boolean
+  message: string
+  previous_stage: ProjectStage
+  current_stage: ProjectStage
+  responsible_department: string
+  responsible_role: string
+  timeline_days: number
+  deadline_at?: string | null
+  actor: string
+  actor_role: string
+  decision: string
+  remarks?: string | null
+  verified_documents: string[]
+  audit_sequence: number
+  audit_hash: string
+  workflow: WorkflowInstance
+}
+
+export interface WorkflowStatusResponse {
+  workflow_id: string
+  project_id: string
+  current_stage: ProjectStage
+  current_stage_name: string
+  responsible_department: string
+  responsible_role: string
+  approval_authority: string
+  timeline_days: number
+  deadline_at?: string | null
+  is_terminal: boolean
+  required_documents: string[]
+  uploaded_documents: string[]
+  missing_documents: string[]
+  can_advance: boolean
+  recent_actions: ApprovalAction[]
 }
 
 export interface ApprovalAction {
@@ -349,7 +396,9 @@ export interface ApiClient {
   getAuditTrail(): Promise<AuditEntry[]>
   verifyAudit(): Promise<AuditVerificationResult>
   advanceWorkflow(workflowId: string, to: ProjectStage): Promise<WorkflowInstance>
-  rejectWorkflow(workflowId: string, reason?: string): Promise<WorkflowInstance>
+  approveWorkflow(id: string, payload: StageGateDecisionPayload): Promise<StageGateDecisionResponse>
+  rejectWorkflow(id: string, payload?: { user?: string; reason?: string; remarks?: string }): Promise<StageGateDecisionResponse>
+  getWorkflowStatus(id: string): Promise<WorkflowStatusResponse>
   getWorkflowHistory(workflowId: string): Promise<ApprovalAction[]>
   listWorkflowRegimes(): Promise<WorkflowRegime[]>
   listDepartments(): Promise<DepartmentInfo[]>
@@ -395,8 +444,10 @@ export const apiPaths = {
   ehrmsLogin: '/mock-ehrms/login',
   ehrmsEmployees: '/mock-ehrms/employees',
   workflowAdvance: (workflowId: string) => `/workflow/${encodeURIComponent(workflowId)}/advance`,
+  workflowApprove: (workflowId: string) => `/workflow/${encodeURIComponent(workflowId)}/approve`,
   workflowReject: (workflowId: string) => `/workflow/${encodeURIComponent(workflowId)}/reject`,
   workflowHistory: (workflowId: string) => `/workflow/${encodeURIComponent(workflowId)}/history`,
+  workflowStatus: (workflowId: string) => `/workflow/${encodeURIComponent(workflowId)}/status`,
   workflowRegimes: '/workflow/regimes',
   workflowStages: '/workflow/stages',
   workflowStage: (code: string) => `/workflow/stages/${encodeURIComponent(code)}`,
@@ -653,6 +704,111 @@ const mockResponse = async <T>(method: string, path: string, body?: unknown): Pr
     }) as T
   }
 
+  if (method === 'GET' && normalizedPath.startsWith('/workflow/') && normalizedPath.endsWith('/status')) {
+    const id = normalizedPath.replace('/workflow/', '').replace('/status', '')
+    const project = mockProjects.find((p) => p.id === id) || mockProjects[0]
+    const stageMeta = statutoryWorkflowStages.find((s) => s.name === project?.stage || s.code === project?.stage) || statutoryWorkflowStages[0]
+    return clone({
+      workflow_id: id,
+      project_id: project ? project.id : id,
+      current_stage: project ? project.stage : 'proposal_initiation',
+      current_stage_name: stageMeta.name,
+      responsible_department: stageMeta.department,
+      responsible_role: stageMeta.role,
+      approval_authority: stageMeta.approvalAuthority,
+      timeline_days: stageMeta.timelineDays,
+      deadline_at: new Date(Date.now() + stageMeta.timelineDays * 86400000).toISOString(),
+      is_terminal: stageMeta.code === 'project_closure',
+      required_documents: stageMeta.requiredDocs,
+      uploaded_documents: stageMeta.requiredDocs,
+      missing_documents: [],
+      can_advance: true,
+      recent_actions: [],
+    }) as T
+  }
+
+  if (method === 'POST' && normalizedPath.startsWith('/workflow/') && normalizedPath.endsWith('/approve')) {
+    const id = normalizedPath.replace('/workflow/', '').replace('/approve', '')
+    const req = (body || {}) as StageGateDecisionPayload
+    const project = mockProjects.find((p) => p.id === id) || mockProjects[0]
+    const currIdx = statutoryWorkflowStages.findIndex((s) => s.code === project?.stage || s.name === project?.stage)
+    const nextIdx = currIdx >= 0 && currIdx < statutoryWorkflowStages.length - 1 ? currIdx + 1 : currIdx
+    const nextStage = statutoryWorkflowStages[nextIdx]
+    const prevStage = statutoryWorkflowStages[currIdx >= 0 ? currIdx : 0]
+    if (project) {
+      project.stage = nextStage.name as any
+      project.updated_at = new Date().toISOString()
+    }
+    return clone({
+      success: true,
+      message: `Stage advanced to '${nextStage.name}'`,
+      previous_stage: prevStage.name,
+      current_stage: nextStage.name,
+      responsible_department: nextStage.department,
+      responsible_role: nextStage.role,
+      timeline_days: nextStage.timelineDays,
+      deadline_at: new Date(Date.now() + nextStage.timelineDays * 86400000).toISOString(),
+      actor: req.user || 'Authorized Officer',
+      actor_role: nextStage.role,
+      decision: 'APPROVE',
+      remarks: req.remarks || 'Statutory gate sign-off completed',
+      verified_documents: req.documents || nextStage.requiredDocs,
+      audit_sequence: Date.now(),
+      audit_hash: 'mock-audit-hash-' + Math.random().toString(36).substring(2, 10),
+      workflow: {
+        id,
+        project_id: project ? project.id : id,
+        authority: 'larr',
+        current_stage: nextStage.name as any,
+        started_at: new Date().toISOString(),
+        responsible_department: nextStage.department,
+        responsible_role: nextStage.role,
+        stage_timeline_days: nextStage.timelineDays,
+      },
+    }) as T
+  }
+
+  if (method === 'POST' && normalizedPath.startsWith('/workflow/') && normalizedPath.endsWith('/reject')) {
+    const id = normalizedPath.replace('/workflow/', '').replace('/reject', '')
+    const req = (body || {}) as any
+    const project = mockProjects.find((p) => p.id === id) || mockProjects[0]
+    const currIdx = statutoryWorkflowStages.findIndex((s) => s.code === project?.stage || s.name === project?.stage)
+    const prevIdx = currIdx > 0 ? currIdx - 1 : 0
+    const prevStage = statutoryWorkflowStages[prevIdx]
+    const currStage = statutoryWorkflowStages[currIdx >= 0 ? currIdx : 0]
+    if (project) {
+      project.stage = prevStage.name as any
+      project.updated_at = new Date().toISOString()
+    }
+    return clone({
+      success: true,
+      message: `Stage reverted to '${prevStage.name}' due to review feedback`,
+      previous_stage: currStage.name,
+      current_stage: prevStage.name,
+      responsible_department: prevStage.department,
+      responsible_role: prevStage.role,
+      timeline_days: prevStage.timelineDays,
+      deadline_at: new Date(Date.now() + prevStage.timelineDays * 86400000).toISOString(),
+      actor: req.user || 'Reviewing Authority',
+      actor_role: currStage.role,
+      decision: 'REJECT',
+      remarks: req.remarks || req.reason || 'Reverted for remediation',
+      verified_documents: [],
+      audit_sequence: Date.now(),
+      audit_hash: 'mock-audit-revert-' + Math.random().toString(36).substring(2, 10),
+      workflow: {
+        id,
+        project_id: project ? project.id : id,
+        authority: 'larr',
+        current_stage: prevStage.name as any,
+        started_at: new Date().toISOString(),
+        responsible_department: prevStage.department,
+        responsible_role: prevStage.role,
+        stage_timeline_days: prevStage.timelineDays,
+      },
+    }) as T
+  }
+
   return mockError(`${method} ${normalizedPath} is not available in mock mode`, normalizedPath, 501, 'mock_endpoint_unavailable')
 }
 
@@ -703,7 +859,12 @@ const request = async <T>(method: string, path: string, body?: unknown): Promise
       const payload = await parseResponse(response)
       return payload as T
     }
+    const errorPayload = await parseResponse(response).catch(() => undefined)
+    throw responseError(method, path, response.status, errorPayload)
   } catch (error) {
+    if (error instanceof ApiError) {
+      throw error
+    }
     // Graceful fallback to deterministic mock logic on connection failure
     console.info(`[LandFlow] Live backend at ${activeBaseUrl} unreachable, using resilient client logic for ${method} ${path}`)
   }
@@ -749,8 +910,12 @@ export const apiClient: ApiClient = {
   verifyAudit: () => request<AuditVerificationResult>('GET', apiPaths.auditVerify),
   advanceWorkflow: (workflowId: string, to: ProjectStage) =>
     request<WorkflowInstance>('POST', apiPaths.workflowAdvance(workflowId), { to }),
-  rejectWorkflow: (workflowId: string, reason?: string) =>
-    request<WorkflowInstance>('POST', apiPaths.workflowReject(workflowId), { reason }),
+  approveWorkflow: (id: string, payload: StageGateDecisionPayload) =>
+    request<StageGateDecisionResponse>('POST', apiPaths.workflowApprove(id), payload),
+  rejectWorkflow: (id: string, payload?: { user?: string; reason?: string; remarks?: string }) =>
+    request<StageGateDecisionResponse>('POST', apiPaths.workflowReject(id), payload ?? {}),
+  getWorkflowStatus: (id: string) =>
+    request<WorkflowStatusResponse>('GET', apiPaths.workflowStatus(id)),
   getWorkflowHistory: (workflowId: string) =>
     request<ApprovalAction[]>('GET', apiPaths.workflowHistory(workflowId)),
   listWorkflowRegimes: () => request<WorkflowRegime[]>('GET', apiPaths.workflowRegimes),

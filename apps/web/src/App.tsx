@@ -428,7 +428,7 @@ const rfctlarrStages: StatutoryStageItem[] = [
     stageCode: 'proposal_initiation',
     timelineDays: 30,
     approvalAuthority: 'Central/State Sanctioning Authority',
-    requiredDocs: ['Detailed Project Report (DPR)', 'Land Alignment Plan Shapefile', 'Village Survey List', 'Budget Sanction Order'],
+    requiredDocs: ['dpr_feasibility_report', 'alignment_shapefile', 'village_survey_list', 'budget_sanction'],
     auditRequirements: 'Project proposal logged with alignment geometry hash and budget sanction reference.',
   },
   {
@@ -439,7 +439,7 @@ const rfctlarrStages: StatutoryStageItem[] = [
     stageCode: 'land_record_verification',
     timelineDays: 45,
     approvalAuthority: 'Sub-Divisional Magistrate (SDM)',
-    requiredDocs: ['Cadastral Map Sheet', 'Jamabandi RoR Extracts', 'DILRMP Sync Record', 'Title Verification Certificate'],
+    requiredDocs: ['cadastral_map', 'jamabandi_ror_extract', 'dilrmp_sync_record'],
     auditRequirements: 'Cadastral land records verified against State DILRMP with ULPIN and mutation status.',
   },
   {
@@ -450,7 +450,7 @@ const rfctlarrStages: StatutoryStageItem[] = [
     stageCode: 'sia_preparation',
     timelineDays: 60,
     approvalAuthority: 'District Collector',
-    requiredDocs: ['SIA Terms of Reference (ToR)', 'Public Consultation Notice', 'Baseline Census Agency MoA'],
+    requiredDocs: ['sia_terms_of_reference', 'public_consultation_notice', 'census_agency_moa'],
     auditRequirements: 'SIA public notice published in affected gram panchayats; baseline census initiated.',
   },
   {
@@ -461,7 +461,7 @@ const rfctlarrStages: StatutoryStageItem[] = [
     stageCode: 'sia_review',
     timelineDays: 60,
     approvalAuthority: 'Independent Expert Group / State Government',
-    requiredDocs: ['SIA Study Report', 'Social Impact Management Plan (SIMP)', 'Expert Group Recommendations'],
+    requiredDocs: ['sia_study_report', 'social_impact_management_plan', 'expert_group_recommendation'],
     auditRequirements: 'Independent Expert Group recommendations evaluated and approved by Appropriate Government.',
   },
   {
@@ -472,7 +472,7 @@ const rfctlarrStages: StatutoryStageItem[] = [
     stageCode: 'preliminary_notification',
     timelineDays: 30,
     approvalAuthority: 'District Collector / Official Gazette',
-    requiredDocs: ['Sec 11(1) Gazette Notification PDF', 'Local Newspaper Publications', 'Gram Sabha Resolution'],
+    requiredDocs: ['section_11_notification_pdf', 'local_newspaper_cuttings', 'gram_sabha_resolution'],
     auditRequirements: 'Section 11 Gazette Extraordinary published; land transaction freeze flag applied.',
   },
   {
@@ -483,7 +483,7 @@ const rfctlarrStages: StatutoryStageItem[] = [
     stageCode: 'objection_period',
     timelineDays: 60,
     approvalAuthority: 'District Collector & CALA',
-    requiredDocs: ['Sec 15(1) Objection Petitions', 'Ownership Proof Documents'],
+    requiredDocs: ['section_15_objection_petitions', 'ownership_proof_documents'],
     auditRequirements: 'Statutory 60-day objection window opened; citizen claims recorded with ticket IDs.',
   },
   {
@@ -494,7 +494,7 @@ const rfctlarrStages: StatutoryStageItem[] = [
     stageCode: 'hearing',
     timelineDays: 30,
     approvalAuthority: 'District Collector',
-    requiredDocs: ['Sec 15(2) Hearing Minutes', 'Collector Inquiry Disposal Order'],
+    requiredDocs: ['section_15_2_hearing_minutes', 'collector_disposal_order'],
     auditRequirements: 'Section 15(2) personal hearings conducted; written disposal orders issued to objectors.',
   },
   {
@@ -505,7 +505,7 @@ const rfctlarrStages: StatutoryStageItem[] = [
     stageCode: 'declaration',
     timelineDays: 365,
     approvalAuthority: 'Appropriate Government',
-    requiredDocs: ['Sec 19(1) Declaration Order', 'Approved R&R Scheme Summary', 'Fund Deposit Receipt'],
+    requiredDocs: ['section_19_declaration_order', 'approved_rr_scheme_summary', 'fund_deposit_receipt'],
     auditRequirements: 'Section 19 Declaration issued within statutory 12-month limit; R&R scheme summary gazetted.',
   },
   {
@@ -516,7 +516,7 @@ const rfctlarrStages: StatutoryStageItem[] = [
     stageCode: 'award_preparation',
     timelineDays: 60,
     approvalAuthority: 'Competent Authority Land Acquisition (CALA)',
-    requiredDocs: ['Joint Measurement Survey Sheet', 'Asset & Crop Valuation Schedule', 'Circle Rate Schedule'],
+    requiredDocs: ['joint_measurement_survey_sheet', 'asset_tree_structure_valuation', 'circle_rate_schedule'],
     auditRequirements: 'True market value determined under Sec 26; attachment valuations completed per Sec 29.',
   },
   {
@@ -527,7 +527,7 @@ const rfctlarrStages: StatutoryStageItem[] = [
     stageCode: 'award_approval',
     timelineDays: 30,
     approvalAuthority: 'District Collector / Commissioner',
-    requiredDocs: ['Sec 23/30 Final Award Order', 'Compensation Apportionment Statement'],
+    requiredDocs: ['section_23_30_final_award_order', 'compensation_apportionment_statement'],
     auditRequirements: 'Formal Section 23/30 award approved under Collector DSC signature with apportionment sheet.',
   },
   {
@@ -538,7 +538,7 @@ const rfctlarrStages: StatutoryStageItem[] = [
     stageCode: 'compensation_calculation',
     timelineDays: 15,
     approvalAuthority: 'Chief Accounts Officer / Treasury',
-    requiredDocs: ['Market Value Computation Sheet', '100% Solatium Determination Sheet', 'Interest Accrual Statement'],
+    requiredDocs: ['market_value_computation_sheet', 'solatium_100_percent_audit_sheet', 'interest_accrual_statement'],
     auditRequirements: 'First Schedule 100% Solatium computed and 12% p.a. additional interest accrued under Sec 30(3).',
   },
   {
@@ -549,7 +549,7 @@ const rfctlarrStages: StatutoryStageItem[] = [
     stageCode: 'payment_processing',
     timelineDays: 30,
     approvalAuthority: 'Treasury Officer / PFMS',
-    requiredDocs: ['PFMS Sanction Order', 'DBT Payment Advice Note', 'Bank UTR Acknowledgements'],
+    requiredDocs: ['pfms_sanction_order', 'dbt_payment_advice', 'bank_utr_acknowledgement'],
     auditRequirements: 'Direct Benefit Transfer disbursed through PFMS with live UTR numbers recorded.',
   },
   {
@@ -560,7 +560,7 @@ const rfctlarrStages: StatutoryStageItem[] = [
     stageCode: 'possession',
     timelineDays: 30,
     approvalAuthority: 'District Collector / Requiring Body',
-    requiredDocs: ['Sec 38 Possession Certificate', 'Panchnama Site Record', 'Handover Memo'],
+    requiredDocs: ['possession_memo', 'panchnama_record', 'handover_certificate'],
     auditRequirements: 'Physical possession taken under Sec 38 after compensation payment; encumbrances extinguished.',
   },
   {
@@ -571,7 +571,7 @@ const rfctlarrStages: StatutoryStageItem[] = [
     stageCode: 'rr_completion',
     timelineDays: 90,
     approvalAuthority: 'Administrator R&R / Commissioner',
-    requiredDocs: ['Schedule II Entitlement Delivery Receipts', 'Resettlement Housing Deed', 'Site Clearance Note'],
+    requiredDocs: ['schedule_ii_entitlement_delivery_receipts', 'housing_allotment_deed', 'resettlement_site_clearance'],
     auditRequirements: 'Resettlement housing grants and subsistence allowances delivered to all affected families.',
   },
   {
@@ -582,7 +582,7 @@ const rfctlarrStages: StatutoryStageItem[] = [
     stageCode: 'project_closure',
     timelineDays: 15,
     approvalAuthority: 'Central/State Ministry',
-    requiredDocs: ['Revenue Title Mutation Order', 'Final Audit Reconciliation Certificate', 'Project Handover Sign-off'],
+    requiredDocs: ['revenue_title_mutation_order', 'final_audit_reconciliation_certificate', 'project_handover_sign_off'],
     auditRequirements: 'Land mutated in government revenue records; final audit closed; project archived.',
   },
 ]
@@ -638,6 +638,10 @@ export default function App() {
   // Modals & Panels
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showGateReviewModal, setShowGateReviewModal] = useState(false)
+  const [gateDocs, setGateDocs] = useState<string[]>([])
+  const [gateRemarks, setGateRemarks] = useState('')
+  const [gateError, setGateError] = useState<string | null>(null)
+  const [gateSubmitting, setGateSubmitting] = useState(false)
   const [showRegimesModal, setShowRegimesModal] = useState(false)
   const [showAuditDrawer, setShowAuditDrawer] = useState(false)
   const [showAiModal, setShowAiModal] = useState(false)
@@ -872,27 +876,62 @@ export default function App() {
     showToast('Returned to NLAMS Portal')
   }
 
-  // Handle Advance Stage
-  const handleAdvanceStage = async () => {
-    if (currentStageIdx >= rfctlarrStages.length - 1) {
-      showToast('Acquisition project has reached final completed stage!')
+  // Handle Gate Approve
+  const handleGateApprove = async () => {
+    const stage = rfctlarrStages[currentStageIdx]
+    const missingDocs = stage.requiredDocs.filter((d) => !gateDocs.includes(d))
+    if (missingDocs.length > 0) {
+      setGateError(`Missing required documents: ${missingDocs.map(d => d.replace(/_/g, ' ')).join(', ')}`)
       return
     }
-    const nextIdx = currentStageIdx + 1
-    const nextStage = rfctlarrStages[nextIdx]
-    setCurrentStageIdx(nextIdx)
-
-    const targetPersonaId = stageToPersonaMap[nextIdx]
-    const found = stakeholderPersonas.find((p) => p.id === targetPersonaId)
-    if (found) setActivePersona(found)
-
+    setGateSubmitting(true)
+    setGateError(null)
     try {
-      await apiClient.advanceWorkflow(selected.id, nextStage.stageCode as any).catch(() => {})
-      showToast(`Advanced to Stage ${nextIdx}: ${nextStage.name}! Role: ${nextStage.actor} (${nextStage.department})`)
-    } catch {
-      showToast(`Advanced to Stage ${nextIdx}: ${nextStage.name}!`)
+      await apiClient.approveWorkflow(selected.id, stage.stageCode as any, gateDocs, gateRemarks)
+      
+      const nextIdx = currentStageIdx + 1
+      if (nextIdx >= rfctlarrStages.length) {
+        showToast('Acquisition project has reached final completed stage!')
+      } else {
+        const nextStage = rfctlarrStages[nextIdx]
+        setCurrentStageIdx(nextIdx)
+        const targetPersonaId = stageToPersonaMap[nextIdx]
+        const found = stakeholderPersonas.find((p) => p.id === targetPersonaId)
+        if (found) setActivePersona(found)
+        showToast(`Advanced to Stage ${nextIdx}: ${nextStage.name}! Role: ${nextStage.actor}`)
+      }
+      setShowGateReviewModal(false)
+      setGateDocs([])
+      setGateRemarks('')
+      handleOpenAudit()
+    } catch (err: any) {
+      setGateError(err.message || 'Failed to approve gate')
+    } finally {
+      setGateSubmitting(false)
     }
-    setShowGateReviewModal(false)
+  }
+
+  // Handle Gate Reject
+  const handleGateReject = async () => {
+    const stage = rfctlarrStages[currentStageIdx]
+    if (!gateRemarks.trim()) {
+      setGateError('Remarks are required for rejection')
+      return
+    }
+    setGateSubmitting(true)
+    setGateError(null)
+    try {
+      await apiClient.rejectWorkflow(selected.id, stage.stageCode as any, gateRemarks)
+      showToast('Returned to previous department for rectification.')
+      setShowGateReviewModal(false)
+      setGateDocs([])
+      setGateRemarks('')
+      handleOpenAudit()
+    } catch (err: any) {
+      setGateError(err.message || 'Failed to reject gate')
+    } finally {
+      setGateSubmitting(false)
+    }
   }
 
   // Handle DILRMP Lookup
@@ -3073,12 +3112,36 @@ export default function App() {
                 <div className="gate-checklist" style={{ marginTop: 6 }}>
                   {rfctlarrStages[currentStageIdx].requiredDocs.map((doc) => (
                     <label className="checklist-item" key={doc}>
-                      <input type="checkbox" defaultChecked />
-                      <span>{doc}</span>
+                      <input 
+                        type="checkbox" 
+                        checked={gateDocs.includes(doc)}
+                        onChange={(e) => {
+                          if (e.target.checked) setGateDocs([...gateDocs, doc])
+                          else setGateDocs(gateDocs.filter(d => d !== doc))
+                        }}
+                      />
+                      <span style={{ textTransform: 'capitalize' }}>{doc.replace(/_/g, ' ')}</span>
                     </label>
                   ))}
                 </div>
               </div>
+
+              <div className="form-group" style={{ marginTop: 12 }}>
+                <label>Remarks / Notes</label>
+                <textarea 
+                  className="form-textarea"
+                  rows={2}
+                  value={gateRemarks}
+                  onChange={(e) => setGateRemarks(e.target.value)}
+                  placeholder="Enter approval/rejection remarks..."
+                />
+              </div>
+
+              {gateError && (
+                <div style={{ marginTop: 12, padding: '8px 12px', background: '#fee2e2', color: '#991b1b', borderRadius: 6, fontSize: 13 }}>
+                  ⚠️ {gateError}
+                </div>
+              )}
 
               <div className="form-group" style={{ marginTop: 12 }}>
                 <label>Digital Signature Certificate (DSC) Token</label>
@@ -3092,15 +3155,17 @@ export default function App() {
             <div className="modal-footer">
               <button
                 className="danger-button"
-                onClick={() => {
-                  showToast('Returned to previous department for rectification.')
-                  setShowGateReviewModal(false)
-                }}
+                onClick={handleGateReject}
+                disabled={gateSubmitting}
               >
                 Return for Revision
               </button>
-              <button className="primary-button" onClick={handleAdvanceStage}>
-                Approve & Advance Stage (DSC Sign) ➔
+              <button 
+                className="primary-button" 
+                onClick={handleGateApprove}
+                disabled={gateSubmitting}
+              >
+                {gateSubmitting ? 'Signing...' : 'Approve & Advance Stage (DSC Sign) ➔'}
               </button>
             </div>
           </div>
