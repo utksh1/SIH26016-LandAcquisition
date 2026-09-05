@@ -2751,7 +2751,7 @@ export default function App() {
                         <span>📋 Additional Collector Console (/dashboard/addl-collector)</span>
                       </h3>
                       <p style={{ margin: '4px 0 0', fontSize: 12, color: '#556c5e' }}>
-                        Officer: <strong>Priya Menon (Additional Collector, LARR) [EMP009]</strong> · Award scrutiny, Section 19 declarations, multi-tehsil coordination
+                        Officer: <strong>Harish Meena (Additional Collector) [EMP008]</strong> · Award scrutiny, Section 19 declarations, multi-tehsil coordination
                       </p>
                     </div>
                     <div style={{ display: 'flex', gap: 8 }}>
