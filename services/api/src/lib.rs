@@ -211,16 +211,92 @@ pub struct InMemoryStore {
 
 impl InMemoryStore {
     pub fn seeded() -> Self {
+        let mut ehrms_employees = HashMap::new();
+        let emps = vec![
+            ("EMP001", "Raj Sharma", "Collector", "Revenue & Disaster Management", "COLLECTOR"),
+            ("EMP002", "Amit Verma", "Revenue Officer / Tehsildar", "Land Records & Revenue", "REVENUE_OFFICER"),
+            ("EMP003", "Neha Singh", "GIS & Survey Officer", "Survey & Geo-informatics", "GIS_OFFICER"),
+            ("EMP004", "Ravi Kumar", "Accounts Officer", "Finance & PFMS Cell", "FINANCE_OFFICER"),
+            ("EMP005", "Suresh Patel", "Rehabilitation Officer", "Resettlement & Rehabilitation", "REHABILITATION_OFFICER"),
+            ("EMP006", "Praveen Singhal", "Chief Project Officer", "National Highways Authority of India", "LAND_REQUIRING_BODY"),
+            ("EMP007", "Dr. Arvinder Roy", "SIA Commissioner", "Directorate of Social Impact", "SIA_OFFICER"),
+            ("EMP008", "Kavita Nair", "Additional Collector", "District Revenue Collectorate", "ADDITIONAL_COLLECTOR"),
+            ("EMP009", "Adv. Madhav Joshi", "Legal Counsel", "Litigation & Legal Scrutiny Cell", "LEGAL_OFFICER"),
+            ("EMP010", "Meenakshi Sundaram", "Secretary (Land Resources)", "Department of Land Resources", "GOVERNMENT_REVIEWER"),
+        ];
+        for (eid, name, desig, dept, role) in emps {
+            ehrms_employees.insert(
+                eid.to_string(),
+                EhrmsEmployee {
+                    id: format!("usr-{}", eid.to_lowercase()),
+                    employee_id: eid.to_string(),
+                    name: name.to_string(),
+                    designation: desig.to_string(),
+                    department: dept.to_string(),
+                    role: role.to_string(),
+                },
+            );
+        }
+
+        let p_id = Uuid::parse_str("00000000-0000-0000-0000-000000000100").unwrap();
+        let w_id = Uuid::parse_str("b02b72e7-cef0-47b7-916e-0a460cbf0eef").unwrap();
+        let now = Utc::now();
+        let handler = sih_workflow::who_handles_stage(&ProjectStage::LandRecordVerification);
+
+        let mut projects = HashMap::new();
+        projects.insert(
+            p_id,
+            Project {
+                id: p_id,
+                name: "Delhi-Mumbai Highway Expansion".to_string(),
+                authority: Authority::NationalHighways,
+                state_code: "KA".to_string(),
+                district_code: "BLR".to_string(),
+                stage: ProjectStage::LandRecordVerification,
+                parcels: vec![Parcel {
+                    id: Uuid::parse_str("00000000-0000-0000-0000-000000000101").unwrap(),
+                    survey_number: "45/2".to_string(),
+                    owner_name: "Meera Devi".to_string(),
+                    area_hectares: 2.5,
+                    district_code: "BLR".to_string(),
+                }],
+                preliminary_notification_at: None,
+                updated_at: now,
+            },
+        );
+
+        let mut workflows = HashMap::new();
+        workflows.insert(
+            w_id,
+            WorkflowInstance {
+                id: w_id,
+                project_id: p_id,
+                authority: Authority::NationalHighways,
+                current_stage: ProjectStage::LandRecordVerification,
+                started_at: now,
+                notification_at: None,
+                deadline_at: Some(now + Duration::days(handler.timeline_days as i64)),
+                completed_at: None,
+                lapsed_at: None,
+                responsible_department: Some(handler.department_code.to_string()),
+                responsible_role: Some(handler.role_code.to_string()),
+                stage_timeline_days: Some(handler.timeline_days),
+            },
+        );
+
+        let mut project_to_workflow = HashMap::new();
+        project_to_workflow.insert(p_id, w_id);
+
         Self {
-            projects: HashMap::new(),
-            workflows: HashMap::new(),
-            project_to_workflow: HashMap::new(),
+            projects,
+            workflows,
+            project_to_workflow,
             approval_history: HashMap::new(),
             audit_log: Vec::new(),
             objections: Vec::new(),
             rehabilitation: HashMap::new(),
             documents: Vec::new(),
-            ehrms_employees: HashMap::new(),
+            ehrms_employees,
         }
     }
 }
@@ -270,6 +346,64 @@ impl AppState {
             .unwrap_or_else(|_| "sih-local-demo-secret-change-me".to_string());
         let auth = DevAuth::new(secret)?;
         Ok(Self::new(None, auth))
+    }
+
+    pub async fn sync_from_db(&self) {
+        let pool = match &self.pool {
+            Some(p) => p,
+            None => return,
+        };
+
+        if let Ok(projects) = self.project_repo.list_projects_async().await {
+            let mut in_mem = self.in_memory.write().unwrap();
+            for p in projects {
+                in_mem.projects.insert(p.id, p);
+            }
+        }
+
+        let rows = sqlx::query(
+            "SELECT id, project_id, authority::text as authority, current_stage, started_at, 
+                    notification_at, deadline_at, completed_at, lapsed_at
+             FROM workflow_instance"
+        )
+        .fetch_all(pool)
+        .await;
+
+        if let Ok(rows) = rows {
+            use sqlx::Row;
+            let mut in_mem = self.in_memory.write().unwrap();
+            for r in rows {
+                let id: Uuid = r.try_get("id").unwrap_or_default();
+                let project_id: Uuid = r.try_get("project_id").unwrap_or_default();
+                let authority_str: String = r.try_get("authority").unwrap_or_else(|_| "larr".to_string());
+                let authority = if authority_str == "national_highways" {
+                    Authority::NationalHighways
+                } else {
+                    Authority::Larr
+                };
+                let stage_str: String = r.try_get("current_stage").unwrap_or_else(|_| "proposal_initiation".to_string());
+                let current_stage = sih_workflow::db_code_to_stage(&stage_str);
+                let handler = sih_workflow::who_handles_stage(&current_stage);
+
+                let instance = WorkflowInstance {
+                    id,
+                    project_id,
+                    authority,
+                    current_stage,
+                    started_at: r.try_get("started_at").unwrap_or_else(|_| Utc::now()),
+                    notification_at: r.try_get("notification_at").ok(),
+                    deadline_at: r.try_get("deadline_at").ok(),
+                    completed_at: r.try_get("completed_at").ok(),
+                    lapsed_at: r.try_get("lapsed_at").ok(),
+                    responsible_department: Some(handler.department_code.to_string()),
+                    responsible_role: Some(handler.role_code.to_string()),
+                    stage_timeline_days: Some(handler.timeline_days),
+                };
+
+                in_mem.workflows.insert(id, instance);
+                in_mem.project_to_workflow.insert(project_id, id);
+            }
+        }
     }
 }
 
@@ -1259,149 +1393,201 @@ async fn approve_workflow_endpoint(
     Path(id_str): Path<String>,
     JsonBody(request): JsonBody<StageGateDecisionRequest>,
 ) -> Result<Json<StageGateDecisionResponse>, ApiError> {
-    let mut in_mem = state.in_memory.write().unwrap();
-    let workflow_id = resolve_workflow_instance(&in_mem, &id_str)?;
-
-    let (project_id, current_stage) = {
-        let instance = in_mem
-            .workflows
-            .get(&workflow_id)
-            .ok_or_else(|| ApiError::NotFound(format!("Workflow not found for ID '{}'", workflow_id)))?;
-        (instance.project_id, instance.current_stage)
-    };
-
-    let handler = sih_workflow::who_handles_stage(&current_stage);
-    let (actor_name, actor_role, actor_dept) = resolve_actor_details(&in_mem, &request.user);
-
-    // Verify role authorization
-    if !is_role_authorized(&actor_role, handler.role_name) {
-        return Err(ApiError::Forbidden(format!(
-            "User '{}' with role '{}' is not authorized to approve stage '{}'. Responsible role is '{}' ({})",
-            request.user, actor_role, sih_workflow::canonical_stage_label(&current_stage), handler.role_name, handler.department_name
-        )));
-    }
-
-    // Verify mandatory documents
-    let project_docs: Vec<DocumentRecord> = in_mem
-        .documents
-        .iter()
-        .filter(|d| d.project_id == project_id)
-        .cloned()
-        .collect();
-    let missing = check_mandatory_documents(
-        handler.required_documents,
-        &request.documents,
-        &project_docs,
-    );
-    if !missing.is_empty() {
-        return Err(ApiError::BadRequest(format!(
-            "Cannot approve stage '{}': missing {} mandatory statutory document(s): [{}]. All required documents under RFCTLARR Act 2013 must be verified and uploaded.",
-            sih_workflow::canonical_stage_label(&current_stage),
-            missing.len(),
-            missing.join(", ")
-        )));
-    }
-
-    let next_stage = next_statutory_stage(&current_stage).unwrap_or(ProjectStage::ProjectClosure);
-    let next_handler = sih_workflow::who_handles_stage(&next_stage);
     let now = Utc::now();
-    let stage_deadline = Some(now + chrono::Duration::days(next_handler.timeline_days as i64));
+    let (
+        workflow_id,
+        project_id,
+        current_stage,
+        next_stage,
+        next_handler,
+        actor_name,
+        actor_role,
+        stage_deadline,
+        seq,
+        audit_hash,
+        updated_instance,
+    ) = {
+        let mut in_mem = state.in_memory.write().unwrap();
+        let workflow_id = resolve_workflow_instance(&in_mem, &id_str)?;
 
-    // Persist verified documents to project
-    for doc_name in &request.documents {
-        let already = in_mem
+        let (project_id, current_stage) = {
+            let instance = in_mem
+                .workflows
+                .get(&workflow_id)
+                .ok_or_else(|| ApiError::NotFound(format!("Workflow not found for ID '{}'", workflow_id)))?;
+            (instance.project_id, instance.current_stage)
+        };
+
+        let handler = sih_workflow::who_handles_stage(&current_stage);
+        let (actor_name, actor_role, actor_dept) = resolve_actor_details(&in_mem, &request.user);
+
+        // Verify role authorization
+        if !is_role_authorized(&actor_role, handler.role_name) {
+            return Err(ApiError::Forbidden(format!(
+                "User '{}' with role '{}' is not authorized to approve stage '{}'. Responsible role is '{}' ({})",
+                request.user, actor_role, sih_workflow::canonical_stage_label(&current_stage), handler.role_name, handler.department_name
+            )));
+        }
+
+        // Verify mandatory documents
+        let project_docs: Vec<DocumentRecord> = in_mem
             .documents
             .iter()
-            .any(|d| d.project_id == project_id && d.file_name.eq_ignore_ascii_case(doc_name));
-        if !already {
-            let doc_hash = format!("sha256-doc-{:x}", (doc_name.len() * 37 + 101));
-            in_mem.documents.push(DocumentRecord {
-                id: Uuid::new_v4(),
-                project_id,
-                kind: format!("{:?}", current_stage),
-                file_name: doc_name.clone(),
-                content_hash: doc_hash,
-                version: 1,
-                signed_by: format!("{} ({})", actor_name, actor_role),
-                uploaded_at: now,
-            });
+            .filter(|d| d.project_id == project_id)
+            .cloned()
+            .collect();
+        let missing = check_mandatory_documents(
+            handler.required_documents,
+            &request.documents,
+            &project_docs,
+        );
+        if !missing.is_empty() {
+            return Err(ApiError::BadRequest(format!(
+                "Cannot approve stage '{}': missing {} mandatory statutory document(s): [{}]. All required documents under RFCTLARR Act 2013 must be verified and uploaded.",
+                sih_workflow::canonical_stage_label(&current_stage),
+                missing.len(),
+                missing.join(", ")
+            )));
         }
-    }
 
-    let updated_instance = {
-        let instance = in_mem
-            .workflows
-            .get_mut(&workflow_id)
-            .ok_or_else(|| ApiError::NotFound("workflow not found".to_string()))?;
+        let next_stage = next_statutory_stage(&current_stage).unwrap_or(ProjectStage::ProjectClosure);
+        let next_handler = sih_workflow::who_handles_stage(&next_stage);
+        let stage_deadline = Some(now + chrono::Duration::days(next_handler.timeline_days as i64));
 
-        instance.current_stage = next_stage;
-        instance.deadline_at = stage_deadline;
-        instance.responsible_department = Some(next_handler.department_code.to_string());
-        instance.responsible_role = Some(next_handler.role_code.to_string());
-        instance.stage_timeline_days = Some(next_handler.timeline_days);
-
-        if next_stage == ProjectStage::PreliminaryNotification {
-            instance.notification_at = Some(now);
+        // Persist verified documents to project
+        for doc_name in &request.documents {
+            let already = in_mem
+                .documents
+                .iter()
+                .any(|d| d.project_id == project_id && d.file_name.eq_ignore_ascii_case(doc_name));
+            if !already {
+                let doc_hash = format!("sha256-doc-{:x}", (doc_name.len() * 37 + 101));
+                in_mem.documents.push(DocumentRecord {
+                    id: Uuid::new_v4(),
+                    project_id,
+                    kind: format!("{:?}", current_stage),
+                    file_name: doc_name.clone(),
+                    content_hash: doc_hash,
+                    version: 1,
+                    signed_by: format!("{} ({})", actor_name, actor_role),
+                    uploaded_at: now,
+                });
+            }
         }
-        if next_stage == ProjectStage::ProjectClosure || next_stage == ProjectStage::Completed {
-            instance.completed_at = Some(now);
+
+        let updated_instance = {
+            let instance = in_mem
+                .workflows
+                .get_mut(&workflow_id)
+                .ok_or_else(|| ApiError::NotFound("workflow not found".to_string()))?;
+
+            instance.current_stage = next_stage;
+            instance.deadline_at = stage_deadline;
+            instance.responsible_department = Some(next_handler.department_code.to_string());
+            instance.responsible_role = Some(next_handler.role_code.to_string());
+            instance.stage_timeline_days = Some(next_handler.timeline_days);
+
+            if next_stage == ProjectStage::PreliminaryNotification {
+                instance.notification_at = Some(now);
+            }
+            if next_stage == ProjectStage::ProjectClosure || next_stage == ProjectStage::Completed {
+                instance.completed_at = Some(now);
+            }
+            instance.clone()
+        };
+
+        if let Some(p) = in_mem.projects.get_mut(&project_id) {
+            p.stage = next_stage;
+            p.updated_at = now;
+            if next_stage == ProjectStage::PreliminaryNotification {
+                p.preliminary_notification_at = Some(now);
+            }
         }
-        instance.clone()
+
+        let action = ApprovalAction {
+            id: Uuid::new_v4(),
+            workflow_instance_id: workflow_id,
+            from_stage: current_stage,
+            to_stage: next_stage,
+            actor_user_id: None,
+            actor_role: sih_domain::Role::Admin,
+            decision: "APPROVED".to_string(),
+            reason: request.remarks.clone(),
+            created_at: now,
+        };
+        in_mem
+            .approval_history
+            .entry(workflow_id)
+            .or_default()
+            .push(action);
+
+        let prev_hash = in_mem
+            .audit_log
+            .last()
+            .map(|e| e.hash.clone())
+            .unwrap_or_default();
+        let seq = (in_mem.audit_log.len() + 1) as u64;
+        let entry = AuditEntry::new(
+            seq,
+            project_id,
+            "STAGE_GATE_APPROVAL",
+            format!("workflow/{}", workflow_id),
+            json!({
+                "from_stage": sih_workflow::canonical_stage_label(&current_stage),
+                "to_stage": sih_workflow::canonical_stage_label(&next_stage),
+                "actor": actor_name,
+                "role": actor_role,
+                "department": actor_dept,
+                "decision": "APPROVE",
+                "remarks": request.remarks,
+                "verified_documents": request.documents,
+                "next_responsible_dept": next_handler.department_code,
+                "next_responsible_role": next_handler.role_code,
+                "sla_deadline": stage_deadline,
+            }),
+            prev_hash,
+        );
+        let audit_hash = entry.hash.clone();
+        in_mem.audit_log.push(entry);
+
+        (
+            workflow_id,
+            project_id,
+            current_stage,
+            next_stage,
+            next_handler,
+            actor_name,
+            actor_role,
+            stage_deadline,
+            seq,
+            audit_hash,
+            updated_instance,
+        )
     };
 
-    if let Some(p) = in_mem.projects.get_mut(&project_id) {
-        p.stage = next_stage;
-        p.updated_at = now;
-        if next_stage == ProjectStage::PreliminaryNotification {
-            p.preliminary_notification_at = Some(now);
-        }
+    if let Some(ref pool) = state.pool {
+        let stage_code = sih_workflow::stage_to_db_code(next_stage);
+        let _ = sqlx::query(
+            "UPDATE workflow_instance SET current_stage = $1, deadline_at = $2, notification_at = $3, completed_at = $4 WHERE id = $5"
+        )
+        .bind(stage_code)
+        .bind(stage_deadline)
+        .bind(if next_stage == ProjectStage::PreliminaryNotification { Some(now) } else { None })
+        .bind(if next_stage == ProjectStage::ProjectClosure || next_stage == ProjectStage::Completed { Some(now) } else { None })
+        .bind(workflow_id)
+        .execute(pool)
+        .await;
+
+        let proj_status = sih_domain::repository::map_stage_to_db_status(next_stage);
+        let _ = sqlx::query(
+            "UPDATE project SET status = $1::project_status, updated_at = $2 WHERE id = $3"
+        )
+        .bind(proj_status)
+        .bind(now)
+        .bind(project_id)
+        .execute(pool)
+        .await;
     }
-
-    let action = ApprovalAction {
-        id: Uuid::new_v4(),
-        workflow_instance_id: workflow_id,
-        from_stage: current_stage,
-        to_stage: next_stage,
-        actor_user_id: None,
-        actor_role: sih_domain::Role::Admin,
-        decision: "APPROVED".to_string(),
-        reason: request.remarks.clone(),
-        created_at: now,
-    };
-    in_mem
-        .approval_history
-        .entry(workflow_id)
-        .or_default()
-        .push(action);
-
-    let prev_hash = in_mem
-        .audit_log
-        .last()
-        .map(|e| e.hash.clone())
-        .unwrap_or_default();
-    let seq = (in_mem.audit_log.len() + 1) as u64;
-    let entry = AuditEntry::new(
-        seq,
-        project_id,
-        "STAGE_GATE_APPROVAL",
-        format!("workflow/{}", workflow_id),
-        json!({
-            "from_stage": sih_workflow::canonical_stage_label(&current_stage),
-            "to_stage": sih_workflow::canonical_stage_label(&next_stage),
-            "actor": actor_name,
-            "role": actor_role,
-            "department": actor_dept,
-            "decision": "APPROVE",
-            "remarks": request.remarks,
-            "verified_documents": request.documents,
-            "next_responsible_dept": next_handler.department_code,
-            "next_responsible_role": next_handler.role_code,
-            "sla_deadline": stage_deadline,
-        }),
-        prev_hash,
-    );
-    let audit_hash = entry.hash.clone();
-    in_mem.audit_log.push(entry);
 
     Ok(Json(StageGateDecisionResponse {
         success: true,
@@ -1435,17 +1621,7 @@ async fn reject_workflow_endpoint(
     Path(id_str): Path<String>,
     JsonBody(body_val): JsonBody<serde_json::Value>,
 ) -> Result<Json<StageGateDecisionResponse>, ApiError> {
-    let mut in_mem = state.in_memory.write().unwrap();
-    let workflow_id = resolve_workflow_instance(&in_mem, &id_str)?;
-
-    let (project_id, current_stage) = {
-        let instance = in_mem
-            .workflows
-            .get(&workflow_id)
-            .ok_or_else(|| ApiError::NotFound(format!("Workflow not found for ID '{}'", workflow_id)))?;
-        (instance.project_id, instance.current_stage)
-    };
-
+    let now = Utc::now();
     let user = body_val.get("user").and_then(|v| v.as_str()).unwrap_or("EMP001");
     let remarks = body_val
         .get("remarks")
@@ -1453,74 +1629,134 @@ async fn reject_workflow_endpoint(
         .or_else(|| body_val.get("reason").and_then(|v| v.as_str()))
         .map(|s| s.to_string());
 
-    let prev_stage = previous_statutory_stage(&current_stage);
-    let prev_handler = sih_workflow::who_handles_stage(&prev_stage);
-    let (actor_name, actor_role, actor_dept) = resolve_actor_details(&in_mem, user);
-    let now = Utc::now();
-    let stage_deadline = Some(now + chrono::Duration::days(prev_handler.timeline_days as i64));
-
-    let updated_instance = {
-        let instance = in_mem
-            .workflows
-            .get_mut(&workflow_id)
-            .ok_or_else(|| ApiError::NotFound("workflow not found".to_string()))?;
-
-        instance.current_stage = prev_stage;
-        instance.deadline_at = stage_deadline;
-        instance.responsible_department = Some(prev_handler.department_code.to_string());
-        instance.responsible_role = Some(prev_handler.role_code.to_string());
-        instance.stage_timeline_days = Some(prev_handler.timeline_days);
-        instance.clone()
-    };
-
-    if let Some(p) = in_mem.projects.get_mut(&project_id) {
-        p.stage = prev_stage;
-        p.updated_at = now;
-    }
-
-    let action = ApprovalAction {
-        id: Uuid::new_v4(),
-        workflow_instance_id: workflow_id,
-        from_stage: current_stage,
-        to_stage: prev_stage,
-        actor_user_id: None,
-        actor_role: sih_domain::Role::Admin,
-        decision: "REJECTED".to_string(),
-        reason: remarks.clone(),
-        created_at: now,
-    };
-    in_mem
-        .approval_history
-        .entry(workflow_id)
-        .or_default()
-        .push(action);
-
-    let prev_hash = in_mem
-        .audit_log
-        .last()
-        .map(|e| e.hash.clone())
-        .unwrap_or_default();
-    let seq = (in_mem.audit_log.len() + 1) as u64;
-    let entry = AuditEntry::new(
-        seq,
+    let (
+        workflow_id,
         project_id,
-        "STAGE_GATE_REJECTION",
-        format!("workflow/{}", workflow_id),
-        json!({
-            "from_stage": sih_workflow::canonical_stage_label(&current_stage),
-            "returned_to": sih_workflow::canonical_stage_label(&prev_stage),
-            "actor": actor_name,
-            "role": actor_role,
-            "department": actor_dept,
-            "decision": "REJECT",
-            "remarks": remarks,
-            "responsible_dept": prev_handler.department_code,
-            "responsible_role": prev_handler.role_code,
-        }),
-        prev_hash,
-    );
-    let audit_hash = entry.hash.clone();
-    in_mem.audit_log.push(entry);
+        current_stage,
+        prev_stage,
+        prev_handler,
+        actor_name,
+        actor_role,
+        stage_deadline,
+        seq,
+        audit_hash,
+        updated_instance,
+    ) = {
+        let mut in_mem = state.in_memory.write().unwrap();
+        let workflow_id = resolve_workflow_instance(&in_mem, &id_str)?;
+
+        let (project_id, current_stage) = {
+            let instance = in_mem
+                .workflows
+                .get(&workflow_id)
+                .ok_or_else(|| ApiError::NotFound(format!("Workflow not found for ID '{}'", workflow_id)))?;
+            (instance.project_id, instance.current_stage)
+        };
+
+        let prev_stage = previous_statutory_stage(&current_stage);
+        let prev_handler = sih_workflow::who_handles_stage(&prev_stage);
+        let (actor_name, actor_role, actor_dept) = resolve_actor_details(&in_mem, user);
+        let stage_deadline = Some(now + chrono::Duration::days(prev_handler.timeline_days as i64));
+
+        let updated_instance = {
+            let instance = in_mem
+                .workflows
+                .get_mut(&workflow_id)
+                .ok_or_else(|| ApiError::NotFound("workflow not found".to_string()))?;
+
+            instance.current_stage = prev_stage;
+            instance.deadline_at = stage_deadline;
+            instance.responsible_department = Some(prev_handler.department_code.to_string());
+            instance.responsible_role = Some(prev_handler.role_code.to_string());
+            instance.stage_timeline_days = Some(prev_handler.timeline_days);
+            instance.clone()
+        };
+
+        if let Some(p) = in_mem.projects.get_mut(&project_id) {
+            p.stage = prev_stage;
+            p.updated_at = now;
+        }
+
+        let action = ApprovalAction {
+            id: Uuid::new_v4(),
+            workflow_instance_id: workflow_id,
+            from_stage: current_stage,
+            to_stage: prev_stage,
+            actor_user_id: None,
+            actor_role: sih_domain::Role::Admin,
+            decision: "REJECTED".to_string(),
+            reason: remarks.clone(),
+            created_at: now,
+        };
+        in_mem
+            .approval_history
+            .entry(workflow_id)
+            .or_default()
+            .push(action);
+
+        let prev_hash = in_mem
+            .audit_log
+            .last()
+            .map(|e| e.hash.clone())
+            .unwrap_or_default();
+        let seq = (in_mem.audit_log.len() + 1) as u64;
+        let entry = AuditEntry::new(
+            seq,
+            project_id,
+            "STAGE_GATE_REJECTION",
+            format!("workflow/{}", workflow_id),
+            json!({
+                "from_stage": sih_workflow::canonical_stage_label(&current_stage),
+                "returned_to": sih_workflow::canonical_stage_label(&prev_stage),
+                "actor": actor_name,
+                "role": actor_role,
+                "department": actor_dept,
+                "decision": "REJECT",
+                "remarks": remarks,
+                "responsible_dept": prev_handler.department_code,
+                "responsible_role": prev_handler.role_code,
+            }),
+            prev_hash,
+        );
+        let audit_hash = entry.hash.clone();
+        in_mem.audit_log.push(entry);
+
+        (
+            workflow_id,
+            project_id,
+            current_stage,
+            prev_stage,
+            prev_handler,
+            actor_name,
+            actor_role,
+            stage_deadline,
+            seq,
+            audit_hash,
+            updated_instance,
+        )
+    };
+
+    if let Some(ref pool) = state.pool {
+        let stage_code = sih_workflow::stage_to_db_code(prev_stage);
+        let _ = sqlx::query(
+            "UPDATE workflow_instance SET current_stage = $1, deadline_at = $2 WHERE id = $3"
+        )
+        .bind(stage_code)
+        .bind(stage_deadline)
+        .bind(workflow_id)
+        .execute(pool)
+        .await;
+
+        let proj_status = sih_domain::repository::map_stage_to_db_status(prev_stage);
+        let _ = sqlx::query(
+            "UPDATE project SET status = $1::project_status, updated_at = $2 WHERE id = $3"
+        )
+        .bind(proj_status)
+        .bind(now)
+        .bind(project_id)
+        .execute(pool)
+        .await;
+    }
 
     Ok(Json(StageGateDecisionResponse {
         success: true,
@@ -2451,12 +2687,17 @@ fn rand_simple(modulus: u64) -> u64 {
 
 async fn visible_projects(actor: &Actor, state: &AppState) -> Result<Vec<Project>, ApiError> {
     if state.pool.is_some() {
-        if let Ok(all_projects) = state.project_repo.list_projects_async().await {
-            if !all_projects.is_empty() {
-                return Ok(all_projects
-                    .into_iter()
-                    .filter(|p| jurisdiction_matches(actor, p))
-                    .collect());
+        match state.project_repo.list_projects_async().await {
+            Ok(all_projects) => {
+                if !all_projects.is_empty() {
+                    return Ok(all_projects
+                        .into_iter()
+                        .filter(|p| jurisdiction_matches(actor, p))
+                        .collect());
+                }
+            }
+            Err(err) => {
+                eprintln!("ERROR in list_projects_async: {:?}", err);
             }
         }
     }

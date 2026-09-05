@@ -24,7 +24,7 @@ impl PgProjectRepository {
         };
 
         let rows = sqlx::query(
-            "SELECT id, name, authority, state_code, district_code, status, updated_at
+            "SELECT id, name, authority::text as authority, state_code, district_code, status::text as status, updated_at
              FROM project WHERE tenant_id = $1 ORDER BY created_at DESC"
         )
         .bind(self.tenant_id)
@@ -66,7 +66,7 @@ impl PgProjectRepository {
         };
 
         let row = sqlx::query(
-            "SELECT id, name, authority, state_code, district_code, status, updated_at
+            "SELECT id, name, authority::text as authority, state_code, district_code, status::text as status, updated_at
              FROM project WHERE id = $1 AND tenant_id = $2"
         )
         .bind(id)
@@ -118,7 +118,7 @@ impl PgProjectRepository {
         sqlx::query(
             "INSERT INTO project (id, tenant_id, name, authority, state_code, district_code, 
                                  status, requiring_body, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+             VALUES ($1, $2, $3, $4::authority_code, $5, $6, $7::project_status, $8, $9)
              ON CONFLICT (id) DO UPDATE SET
                  name = EXCLUDED.name,
                  authority = EXCLUDED.authority,
@@ -455,7 +455,7 @@ impl PgOwnerRepository {
     }
 }
 
-fn map_db_status_to_stage(status: &str) -> ProjectStage {
+pub fn map_db_status_to_stage(status: &str) -> ProjectStage {
     match status {
         "proposal_initiation" | "draft" => ProjectStage::ProposalInitiation,
         "land_record_verification" | "land_verification" => ProjectStage::LandRecordVerification,
@@ -477,23 +477,16 @@ fn map_db_status_to_stage(status: &str) -> ProjectStage {
     }
 }
 
-fn map_stage_to_db_status(stage: ProjectStage) -> &'static str {
+pub fn map_stage_to_db_status(stage: ProjectStage) -> &'static str {
     match stage {
-        ProjectStage::ProposalInitiation | ProjectStage::Draft | ProjectStage::Sanctioned => "proposal_initiation",
-        ProjectStage::LandRecordVerification | ProjectStage::Survey => "land_record_verification",
-        ProjectStage::SiaPreparation => "sia_preparation",
-        ProjectStage::SiaReview => "sia_review",
-        ProjectStage::PreliminaryNotification => "preliminary_notification",
-        ProjectStage::ObjectionPeriod | ProjectStage::PublicHearing => "objection_period",
-        ProjectStage::Hearing => "hearing",
-        ProjectStage::Declaration => "declaration",
-        ProjectStage::AwardPreparation => "award_preparation",
-        ProjectStage::AwardApproval | ProjectStage::CompensationAward => "award_approval",
-        ProjectStage::CompensationCalculation => "compensation_calculation",
-        ProjectStage::PaymentProcessing | ProjectStage::FundsDisbursed => "payment_processing",
-        ProjectStage::Possession => "possession",
-        ProjectStage::RrCompletion | ProjectStage::RrScheme => "rr_completion",
-        ProjectStage::ProjectClosure | ProjectStage::Completed => "project_closure",
+        ProjectStage::ProposalInitiation | ProjectStage::Draft | ProjectStage::Sanctioned => "draft",
+        ProjectStage::LandRecordVerification | ProjectStage::Survey => "land_verification",
+        ProjectStage::SiaPreparation | ProjectStage::SiaReview | ProjectStage::PreliminaryNotification => "notification",
+        ProjectStage::ObjectionPeriod | ProjectStage::PublicHearing | ProjectStage::Hearing | ProjectStage::Declaration => "objection_period",
+        ProjectStage::AwardPreparation | ProjectStage::AwardApproval | ProjectStage::CompensationAward => "award_generation",
+        ProjectStage::CompensationCalculation | ProjectStage::PaymentProcessing | ProjectStage::FundsDisbursed => "compensation",
+        ProjectStage::Possession | ProjectStage::RrCompletion | ProjectStage::RrScheme => "possession",
+        ProjectStage::ProjectClosure | ProjectStage::Completed => "completed",
         ProjectStage::Lapsed => "lapsed",
     }
 }

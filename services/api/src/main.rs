@@ -29,6 +29,7 @@ async fn main() {
     };
 
     let state = AppState::new(pool, auth);
+    state.sync_from_db().await;
     
     let listener = tokio::net::TcpListener::bind(address)
         .await
