@@ -1,0 +1,19 @@
+[package]
+name = "sih-api"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+axum.workspace = true
+chrono.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tokio.workspace = true
+tower-http.workspace = true
+uuid.workspace = true
+sih-domain = { path = "../domain" }
+sih-workflow = { path = "../workflow" }
+
+[dev-dependencies]
+tower = "0.5"

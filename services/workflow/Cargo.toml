@@ -1,0 +1,9 @@
+[package]
+name = "sih-workflow"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+chrono.workspace = true
+sih-domain = { path = "../domain" }
+uuid.workspace = true

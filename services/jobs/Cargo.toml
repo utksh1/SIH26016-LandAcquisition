@@ -1,0 +1,10 @@
+[package]
+name = "sih-jobs"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+chrono.workspace = true
+sih-domain = { path = "../domain" }
+sih-integrations = { path = "../integrations" }
+sih-workflow = { path = "../workflow" }

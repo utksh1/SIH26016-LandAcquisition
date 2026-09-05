@@ -1,0 +1,65 @@
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-landflow}
+      POSTGRES_USER: ${POSTGRES_USER:-landflow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-landflow_local_only}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - landflow_pgdata:/var/lib/postgresql/data
+      - ../../db/migrations/001_initial.sql:/docker-entrypoint-initdb.d/001_initial.sql:ro
+      - ../../db/seeds/demo.sql:/docker-entrypoint-initdb.d/002_demo.sql:ro
+      - ../../db/fixtures/workflow.sql:/docker-entrypoint-initdb.d/003_workflow.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    image: busybox:1.36
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-landflow}:${POSTGRES_PASSWORD:-landflow_local_only}@db:5432/${POSTGRES_DB:-landflow}
+      SIH_DEV_AUTH_SECRET: ${SIH_DEV_AUTH_SECRET:-sih-local-demo-secret-change-me}
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${API_PORT:-8080}:8080"
+    command:
+      - sh
+      - -c
+      - >-
+        mkdir -p /www &&
+        printf '%s\n' '{"status":"placeholder","service":"api","database":"not connected"}' > /www/health &&
+        httpd -f -p 8080 -h /www
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  frontend:
+    image: busybox:1.36
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${FRONTEND_PORT:-5173}:8080"
+    command:
+      - sh
+      - -c
+      - >-
+        mkdir -p /www &&
+        printf '%s\n' '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>LandFlow frontend placeholder</title></head><body><h1>LandFlow frontend placeholder</h1><p>Run apps/web for the Vite frontend.</p></body></html>' > /www/index.html &&
+        httpd -f -p 8080 -h /www
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:8080/"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  landflow_pgdata:
