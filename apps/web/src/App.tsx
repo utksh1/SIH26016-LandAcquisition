@@ -631,6 +631,126 @@ const stageToPersonaMap: Record<number, StakeholderId> = {
   14: 'government_dashboard',
 }
 
+/**
+ * Role-conditional panel visibility map.
+ *
+ * Each role now sees a DIFFERENT main dashboard, not the same shared view.
+ * `sections` controls the visibility of shared sections inside the primary column:
+ *   - role_action_console   : always true (the colored banner)
+ *   - role_dashboard       : the role-specific card grid (defined inline below)
+ *   - detail_panel         : project header + 15-stage RFCTLARR workflow bar
+ *   - map_panel            : cadastral GIS map
+ *   - studio_panel         : DILRMP / PFMS / AI tabs
+ *   - attention_panel      : alerts / notices
+ *   - timeline_panel       : audit history
+ *
+ * `sidebar` controls the secondary column:
+ *   - objections_desk      : Section 15 objection inbox + filing form
+ *   - rr_tracker           : R&R entitlements progress
+ *   - audit_quote          : the static quote card
+ *
+ * `studioTabs` filters which integration tabs are relevant for the role.
+ */
+type SectionKey =
+  | 'role_action_console'
+  | 'role_dashboard'
+  | 'detail_panel'
+  | 'map_panel'
+  | 'studio_panel'
+  | 'attention_panel'
+  | 'timeline_panel'
+
+type SidebarKey = 'objections_desk' | 'rr_tracker' | 'audit_quote'
+type StudioTabKey = 'dilrmp' | 'pfms' | 'notice' | 'delay'
+
+interface RolePanelConfig {
+  sections: SectionKey[]
+  sidebar: SidebarKey[]
+  studioTabs: StudioTabKey[]
+  defaultStudioTab: StudioTabKey
+}
+
+const ROLE_PANEL_CONFIG: Record<StakeholderId, RolePanelConfig> = {
+  collector: {
+    sections: ['role_action_console', 'role_dashboard', 'detail_panel', 'studio_panel', 'timeline_panel'],
+    sidebar: ['objections_desk', 'audit_quote'],
+    studioTabs: ['notice', 'delay'],
+    defaultStudioTab: 'notice',
+  },
+  additional_collector: {
+    sections: ['role_action_console', 'role_dashboard', 'detail_panel', 'timeline_panel'],
+    sidebar: ['objections_desk', 'audit_quote'],
+    studioTabs: ['notice'],
+    defaultStudioTab: 'notice',
+  },
+  revenue_officer: {
+    sections: ['role_action_console', 'role_dashboard', 'detail_panel', 'studio_panel'],
+    sidebar: ['audit_quote'],
+    studioTabs: ['dilrmp'],
+    defaultStudioTab: 'dilrmp',
+  },
+  gis_surveyor: {
+    sections: ['role_action_console', 'role_dashboard', 'map_panel'],
+    sidebar: ['audit_quote'],
+    studioTabs: [],
+    defaultStudioTab: 'dilrmp',
+  },
+  sia_officer: {
+    sections: ['role_action_console', 'role_dashboard', 'detail_panel', 'studio_panel'],
+    sidebar: ['rr_tracker', 'audit_quote'],
+    studioTabs: ['notice', 'delay'],
+    defaultStudioTab: 'notice',
+  },
+  legal_officer: {
+    sections: ['role_action_console', 'role_dashboard', 'detail_panel', 'studio_panel', 'timeline_panel'],
+    sidebar: ['objections_desk', 'audit_quote'],
+    studioTabs: ['notice', 'delay'],
+    defaultStudioTab: 'notice',
+  },
+  finance_officer: {
+    sections: ['role_action_console', 'role_dashboard', 'detail_panel', 'studio_panel'],
+    sidebar: ['audit_quote'],
+    studioTabs: ['pfms', 'delay'],
+    defaultStudioTab: 'pfms',
+  },
+  rehabilitation_officer: {
+    sections: ['role_action_console', 'role_dashboard', 'detail_panel'],
+    sidebar: ['rr_tracker', 'audit_quote'],
+    studioTabs: [],
+    defaultStudioTab: 'delay',
+  },
+  land_owner: {
+    sections: ['role_action_console', 'role_dashboard', 'map_panel'],
+    sidebar: ['objections_desk', 'audit_quote'],
+    studioTabs: [],
+    defaultStudioTab: 'notice',
+  },
+  requiring_body: {
+    sections: ['role_action_console', 'role_dashboard', 'detail_panel', 'studio_panel'],
+    sidebar: ['audit_quote'],
+    studioTabs: ['delay'],
+    defaultStudioTab: 'delay',
+  },
+  government_dashboard: {
+    sections: ['role_action_console', 'role_dashboard', 'studio_panel', 'timeline_panel'],
+    sidebar: ['audit_quote'],
+    studioTabs: ['delay'],
+    defaultStudioTab: 'delay',
+  },
+}
+
+function roleHasSection(role: StakeholderId, key: SectionKey): boolean {
+  return ROLE_PANEL_CONFIG[role]?.sections.includes(key) ?? false
+}
+
+function roleHasSidebar(role: StakeholderId, key: SidebarKey): boolean {
+  return ROLE_PANEL_CONFIG[role]?.sidebar.includes(key) ?? false
+}
+
+function roleStudioTabs(role: StakeholderId): StudioTabKey[] {
+  return ROLE_PANEL_CONFIG[role]?.studioTabs ?? []
+}
+
 function StatusPill({ status }: { status: Project['status'] }) {
   const className = status.toLowerCase().replace(' ', '-')
   return (
@@ -718,6 +838,17 @@ export default function App() {
       syncWorkflowStatus(selected.id)
     }
   }, [selected.id])
+
+  // Reset studio tool tab when persona changes so we never show a tab the
+  // current role is not permitted to see (per ROLE_PANEL_CONFIG).
+  useEffect(() => {
+    const allowed = roleStudioTabs(activePersona.id)
+    const def = ROLE_PANEL_CONFIG[activePersona.id]?.defaultStudioTab ?? 'dilrmp'
+    if (allowed.length === 0) return
+    if (!allowed.includes(toolTab as StudioTabKey)) {
+      setToolTab(def)
+    }
+  }, [activePersona.id])
 
   // Modals & Panels
   const [showCreateModal, setShowCreateModal] = useState(false)
@@ -2491,7 +2622,239 @@ export default function App() {
                 </section>
               )}
 
+              {/* 6b. SIA OFFICER DASHBOARD (/dashboard/sia) */}
+              {activePersona.id === 'sia_officer' && (
+                <section className="role-dashboard-container">
+                  <div className="role-dashboard-header">
+                    <div>
+                      <span className="eyebrow">SOCIAL IMPACT ASSESSMENT · DIRECTORATE</span>
+                      <h3>
+                        <span>👥 SIA Officer Console (/dashboard/sia)</span>
+                      </h3>
+                      <p style={{ margin: '4px 0 0', fontSize: 12, color: '#556c5e' }}>
+                        Officer: <strong>Dr. Arvinder Roy (SIA Commissioner) [EMP007]</strong> · Conducts Section 4–9 SIA study, public consultations, and SIMP
+                      </p>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button
+                        className="primary-button"
+                        onClick={() => {
+                          setToolTab('notice')
+                          showToast('SIA Terms of Reference generated for public consultation.')
+                        }}
+                      >
+                        Generate SIA ToR ➔
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="role-card-grid">
+                    <div className="role-item-card">
+                      <h4><span>SIA Studies In Progress</span><span className="badge-warning">● ACTIVE</span></h4>
+                      <div style={{ fontSize: 11, color: '#52695c', display: 'grid', gap: 6 }}>
+                        <div>• Bharatpur Package II — Census 78% complete</div>
+                        <div>• Kushinagar Airport — SIMP draft review</div>
+                        <div>• Kurnool Solar Park — Public hearing scheduled</div>
+                      </div>
+                    </div>
+                    <div className="role-item-card">
+                      <h4><span>Affected Family Census</span><span className="badge-success">● SYNCED</span></h4>
+                      <div style={{ fontSize: 11, color: '#52695c', display: 'grid', gap: 6 }}>
+                        <div>• Total identified: 248</div>
+                        <div>• Vulnerable (SC/ST): 64</div>
+                        <div>• Displaced: 92</div>
+                      </div>
+                    </div>
+                    <div className="role-item-card">
+                      <h4><span>Expert Group Appraisal</span><span className="badge-warning">● PENDING</span></h4>
+                      <div style={{ fontSize: 11, color: '#52695c', display: 'grid', gap: 6 }}>
+                        <div>• Bharatpur EGP meet: 14 Sep 2026</div>
+                        <div>• SIMP submission: 22 Sep 2026</div>
+                      </div>
+                    </div>
+                    <div className="role-item-card">
+                      <h4><span>Gram Sabha Consent</span><span className="badge-success">● CLEARED</span></h4>
+                      <div style={{ fontSize: 11, color: '#52695c', display: 'grid', gap: 6 }}>
+                        <div>• 5th Schedule areas: 3 villages</div>
+                        <div>• Resolution artefact: uploaded</div>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+              )}
+
+              {/* 6c. LEGAL OFFICER DASHBOARD (/dashboard/legal) */}
+              {activePersona.id === 'legal_officer' && (
+                <section className="role-dashboard-container">
+                  <div className="role-dashboard-header">
+                    <div>
+                      <span className="eyebrow">LEGAL & LITIGATION CELL</span>
+                      <h3>
+                        <span>⚖️ Legal Officer Console (/dashboard/legal)</span>
+                      </h3>
+                      <p style={{ margin: '4px 0 0', fontSize: 12, color: '#556c5e' }}>
+                        Officer: <strong>Adv. Madhav Joshi (Legal Counsel) [EMP009]</strong> · Scrutinizes awards, manages court stays, assembles Section 64 reference bundles
+                      </p>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button
+                        className="primary-button"
+                        onClick={() => showToast('Document bundle assembled with SHA-256 custody chain.')}
+                      >
+                        Assemble Case Bundle ➔
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="role-card-grid">
+                    <div className="role-item-card">
+                      <h4><span>Active Litigation Cases</span><span className="badge-danger">● 4 OPEN</span></h4>
+                      <div style={{ fontSize: 11, color: '#52695c', display: 'grid', gap: 6 }}>
+                        <div>• WP-2026-184 — Stay on Survey 1043</div>
+                        <div>• Ref-2026-07 — Section 64 valuation reference</div>
+                        <div>• EA-2026-22 — Title dispute (multiple claimants)</div>
+                      </div>
+                    </div>
+                    <div className="role-item-card">
+                      <h4><span>Award Scrutiny Queue</span><span className="badge-warning">● 12 PENDING</span></h4>
+                      <div style={{ fontSize: 11, color: '#52695c', display: 'grid', gap: 6 }}>
+                        <div>• Award pack 091 — Signature mismatch</div>
+                        <div>• Award pack 094 — Apportionment review</div>
+                      </div>
+                    </div>
+                    <div className="role-item-card">
+                      <h4><span>Court Stay Register</span><span className="badge-warning">● 2 ACTIVE</span></h4>
+                      <div style={{ fontSize: 11, color: '#52695c', display: 'grid', gap: 6 }}>
+                        <div>• Stay from: 12 Aug 2026 → 30 Nov 2026</div>
+                        <div>• Timeline impact: 110 days excluded</div>
+                      </div>
+                    </div>
+                    <div className="role-item-card">
+                      <h4><span>Document Bundle Integrity</span><span className="badge-success">● VERIFIED</span></h4>
+                      <div style={{ fontSize: 11, color: '#52695c', display: 'grid', gap: 6 }}>
+                        <div>• Bundles: 18</div>
+                        <div>• Hash chain: intact</div>
+                        <div>• Custody events: 142</div>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+              )}
+
+              {/* 6d. ADDITIONAL COLLECTOR DASHBOARD (/dashboard/addl-collector) */}
+              {activePersona.id === 'additional_collector' && (
+                <section className="role-dashboard-container">
+                  <div className="role-dashboard-header">
+                    <div>
+                      <span className="eyebrow">DISTRICT COLLECTORATE · CALA SUPPORT</span>
+                      <h3>
+                        <span>📋 Additional Collector Console (/dashboard/addl-collector)</span>
+                      </h3>
+                      <p style={{ margin: '4px 0 0', fontSize: 12, color: '#556c5e' }}>
+                        Officer: <strong>Priya Menon (Additional Collector, LARR) [EMP009]</strong> · Award scrutiny, Section 19 declarations, multi-tehsil coordination
+                      </p>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button
+                        className="primary-button"
+                        onClick={() => setShowGateReviewModal(true)}
+                      >
+                        Scrutinize Award ➔
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="role-card-grid">
+                    <div className="role-item-card">
+                      <h4><span>Award Scrutiny Queue</span><span className="badge-warning">● 8 PENDING</span></h4>
+                      <div style={{ fontSize: 11, color: '#52695c', display: 'grid', gap: 6 }}>
+                        <div>• Village Karanpur — 4 parcels</div>
+                        <div>• Village Rampur — 6 parcels</div>
+                      </div>
+                    </div>
+                    <div className="role-item-card">
+                      <h4><span>Section 19 Declarations</span><span className="badge-success">● 3 DRAFTED</span></h4>
+                      <div style={{ fontSize: 11, color: '#52695c', display: 'grid', gap: 6 }}>
+                        <div>• NH-48 Package II — Ready</div>
+                        <div>• DMIC Vadodara — In review</div>
+                      </div>
+                    </div>
+                    <div className="role-item-card">
+                      <h4><span>Multi-Tehsil Coordination</span><span className="badge-success">● SYNCED</span></h4>
+                      <div style={{ fontSize: 11, color: '#52695c', display: 'grid', gap: 6 }}>
+                        <div>• Tehsils linked: 7</div>
+                        <div>• Mutation requests: 24</div>
+                      </div>
+                    </div>
+                    <div className="role-item-card">
+                      <h4><span>Hearing Schedule</span><span className="badge-warning">● 5 UPCOMING</span></h4>
+                      <div style={{ fontSize: 11, color: '#52695c', display: 'grid', gap: 6 }}>
+                        <div>• 12 Sep — Bharatpur</div>
+                        <div>• 18 Sep — Kushinagar</div>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+              )}
+
+              {/* 6e. GOVERNMENT REVIEWER DASHBOARD (/dashboard/oversight) */}
+              {activePersona.id === 'government_dashboard' && (
+                <section className="role-dashboard-container">
+                  <div className="role-dashboard-header">
+                    <div>
+                      <span className="eyebrow">APPROPRIATE GOVERNMENT · OVERSIGHT</span>
+                      <h3>
+                        <span>🇮🇳 Government Reviewer Console (/dashboard/oversight)</span>
+                      </h3>
+                      <p style={{ margin: '4px 0 0', fontSize: 12, color: '#556c5e' }}>
+                        Officer: <strong>Meenakshi Sundaram (Joint Secretary, DoLR) [EMP010]</strong> · Issues Section 19 declarations, monitors national corridors, audits regime compliance
+                      </p>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button
+                        className="primary-button"
+                        onClick={handleOpenAudit}
+                      >
+                        Verify Audit Ledger ➔
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="role-card-grid">
+                    <div className="role-item-card">
+                      <h4><span>National Portfolio</span><span className="badge-success">● 42 ACTIVE</span></h4>
+                      <div style={{ fontSize: 11, color: '#52695c', display: 'grid', gap: 6 }}>
+                        <div>• 18 states · 64 districts</div>
+                        <div>• LARR: 31 | NH Act: 9 | Rail: 2</div>
+                      </div>
+                    </div>
+                    <div className="role-item-card">
+                      <h4><span>Section 19 Declarations</span><span className="badge-warning">● 7 PENDING</span></h4>
+                      <div style={{ fontSize: 11, color: '#52695c', display: 'grid', gap: 6 }}>
+                        <div>• 4 within 12-month limit</div>
+                        <div>• 3 approaching lapse</div>
+                      </div>
+                    </div>
+                    <div className="role-item-card">
+                      <h4><span>AI Delay Risk Scoring</span><span className="badge-warning">● 6 HIGH</span></h4>
+                      <div style={{ fontSize: 11, color: '#52695c', display: 'grid', gap: 6 }}>
+                        <div>• Model: rules-mvp-1</div>
+                        <div>• Median delay: 21 days</div>
+                      </div>
+                    </div>
+                    <div className="role-item-card">
+                      <h4><span>SHA-256 Audit Integrity</span><span className="badge-success">● VERIFIED</span></h4>
+                      <div style={{ fontSize: 11, color: '#52695c', display: 'grid', gap: 6 }}>
+                        <div>• Hash chain: intact</div>
+                        <div>• Genesis entry: 12 Feb 2025</div>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+              )}
+
               {/* Project Detail & RFCTLARR Workflow Bar */}
+              {roleHasSection(activePersona.id, 'detail_panel') && (
               <section className="panel detail-panel">
                 <div className="detail-heading">
                   <div>
@@ -2594,8 +2957,10 @@ export default function App() {
                   </button>
                 </div>
               </section>
+              )}
 
               {/* GIS Map Panel (Interactive) */}
+              {roleHasSection(activePersona.id, 'map_panel') && (
               <section className="panel map-panel">
                 <div className="panel-heading">
                   <div>
@@ -2799,34 +3164,44 @@ export default function App() {
                   </div>
                 </div>
               </section>
+              )}
 
               {/* Stakeholder Action Panel (Role Tailored) */}
+              {roleHasSection(activePersona.id, 'studio_panel') && (
               <section className="studio-panel">
                 <div className="studio-tabs">
-                  <button
-                    className={`studio-tab ${toolTab === 'dilrmp' ? 'active' : ''}`}
-                    onClick={() => setToolTab('dilrmp')}
-                  >
-                    DILRMP Live Lookup
-                  </button>
-                  <button
-                    className={`studio-tab ${toolTab === 'pfms' ? 'active' : ''}`}
-                    onClick={() => setToolTab('pfms')}
-                  >
-                    PFMS DBT Disbursement
-                  </button>
-                  <button
-                    className={`studio-tab ${toolTab === 'notice' ? 'active' : ''}`}
-                    onClick={() => setToolTab('notice')}
-                  >
-                    Document AI (OCR Notice)
-                  </button>
-                  <button
-                    className={`studio-tab ${toolTab === 'delay' ? 'active' : ''}`}
-                    onClick={() => setToolTab('delay')}
-                  >
-                    Delay Risk Predictor
-                  </button>
+                  {roleStudioTabs(activePersona.id).includes('dilrmp') && (
+                    <button
+                      className={`studio-tab ${toolTab === 'dilrmp' ? 'active' : ''}`}
+                      onClick={() => setToolTab('dilrmp')}
+                    >
+                      DILRMP Live Lookup
+                    </button>
+                  )}
+                  {roleStudioTabs(activePersona.id).includes('pfms') && (
+                    <button
+                      className={`studio-tab ${toolTab === 'pfms' ? 'active' : ''}`}
+                      onClick={() => setToolTab('pfms')}
+                    >
+                      PFMS DBT Disbursement
+                    </button>
+                  )}
+                  {roleStudioTabs(activePersona.id).includes('notice') && (
+                    <button
+                      className={`studio-tab ${toolTab === 'notice' ? 'active' : ''}`}
+                      onClick={() => setToolTab('notice')}
+                    >
+                      Document AI (OCR Notice)
+                    </button>
+                  )}
+                  {roleStudioTabs(activePersona.id).includes('delay') && (
+                    <button
+                      className={`studio-tab ${toolTab === 'delay' ? 'active' : ''}`}
+                      onClick={() => setToolTab('delay')}
+                    >
+                      Delay Risk Predictor
+                    </button>
+                  )}
                 </div>
 
                 <div className="studio-content">
@@ -3035,11 +3410,13 @@ export default function App() {
                   )}
                 </div>
               </section>
+              )}
             </div>
 
             {/* Sidebar Column */}
             <aside className="secondary-column">
               {/* Section 15 Objections Desk */}
+              {roleHasSidebar(activePersona.id, 'objections_desk') && (
               <section className="panel attention-panel">
                 <div className="panel-heading">
                   <div>
@@ -3138,8 +3515,10 @@ export default function App() {
                   </div>
                 </div>
               </section>
+              )}
 
               {/* R&R Entitlements Desk */}
+              {roleHasSidebar(activePersona.id, 'rr_tracker') && (
               <section className="panel timeline-panel">
                 <div className="panel-heading">
                   <div>
@@ -3191,13 +3570,16 @@ export default function App() {
                   </button>
                 </div>
               </section>
+              )}
 
               {/* Operating Principle Quote */}
+              {roleHasSidebar(activePersona.id, 'audit_quote') && (
               <section className="quote-card">
                 <div className="quote-mark">“</div>
                 <p>Every parcel has a person behind it. Keep the record clear, the process fair.</p>
                 <span>— LandFlow Operating Principle · SIH26016</span>
               </section>
+              )}
             </aside>
           </section>
 
