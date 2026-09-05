@@ -211,383 +211,16 @@ pub struct InMemoryStore {
 
 impl InMemoryStore {
     pub fn seeded() -> Self {
-        let mut projects = HashMap::new();
-        let mut workflows = HashMap::new();
-        let mut project_to_workflow = HashMap::new();
-        let mut approval_history = HashMap::new();
-        let mut audit_log = Vec::new();
-
-        // Project 1: NH-48 Package II (Bharatpur)
-        let p1_id = Uuid::from_u128(101);
-        let p1 = Project {
-            id: p1_id,
-            name: "NH-48 Package II (Bharatpur)".to_string(),
-            authority: Authority::NationalHighways,
-            state_code: "RJ".to_string(),
-            district_code: "BTP".to_string(),
-            stage: ProjectStage::Survey,
-            parcels: vec![
-                Parcel {
-                    id: Uuid::from_u128(1001),
-                    survey_number: "1042".to_string(),
-                    owner_name: "Asha Devi".to_string(),
-                    area_hectares: 1.25,
-                    district_code: "BTP".to_string(),
-                },
-                Parcel {
-                    id: Uuid::from_u128(1002),
-                    survey_number: "1043".to_string(),
-                    owner_name: "Ramesh Patel".to_string(),
-                    area_hectares: 0.85,
-                    district_code: "BTP".to_string(),
-                },
-                Parcel {
-                    id: Uuid::from_u128(1003),
-                    survey_number: "1044".to_string(),
-                    owner_name: "Vikram Singh".to_string(),
-                    area_hectares: 2.10,
-                    district_code: "BTP".to_string(),
-                },
-                Parcel {
-                    id: Uuid::from_u128(1004),
-                    survey_number: "1045".to_string(),
-                    owner_name: "Sunita Bai".to_string(),
-                    area_hectares: 0.65,
-                    district_code: "BTP".to_string(),
-                },
-            ],
-            preliminary_notification_at: Some(Utc::now() - Duration::days(45)),
-            updated_at: Utc::now(),
-        };
-        let w1_id = Uuid::from_u128(201);
-        let h1 = sih_workflow::who_handles_stage(&ProjectStage::Survey);
-        let w1 = WorkflowInstance {
-            id: w1_id,
-            project_id: p1_id,
-            authority: Authority::NationalHighways,
-            current_stage: ProjectStage::Survey,
-            started_at: Utc::now() - Duration::days(45),
-            notification_at: Some(Utc::now() - Duration::days(45)),
-            deadline_at: Some(Utc::now() + Duration::days(320)),
-            completed_at: None,
-            lapsed_at: None,
-            responsible_department: Some(h1.department_code.to_string()),
-            responsible_role: Some(h1.role_code.to_string()),
-            stage_timeline_days: Some(h1.timeline_days),
-        };
-        projects.insert(p1_id, p1);
-        workflows.insert(w1_id, w1);
-        project_to_workflow.insert(p1_id, w1_id);
-        approval_history.insert(
-            w1_id,
-            vec![ApprovalAction {
-                id: Uuid::new_v4(),
-                workflow_instance_id: w1_id,
-                from_stage: ProjectStage::Draft,
-                to_stage: ProjectStage::Survey,
-                actor_user_id: Some(Uuid::from_u128(1)),
-                actor_role: Role::Collector,
-                decision: "advanced".to_string(),
-                reason: Some("Stage 0 scrutiny complete".to_string()),
-                created_at: Utc::now() - Duration::days(45),
-            }],
-        );
-
-        // Project 2: Delhi-Mumbai Expressway (Vadodara)
-        let p2_id = Uuid::from_u128(102);
-        let p2 = Project {
-            id: p2_id,
-            name: "Delhi-Mumbai Expressway (Vadodara)".to_string(),
-            authority: Authority::NationalHighways,
-            state_code: "GJ".to_string(),
-            district_code: "VDR".to_string(),
-            stage: ProjectStage::CompensationAward,
-            parcels: vec![
-                Parcel {
-                    id: Uuid::from_u128(2001),
-                    survey_number: "201".to_string(),
-                    owner_name: "Kishore Bhai".to_string(),
-                    area_hectares: 3.40,
-                    district_code: "VDR".to_string(),
-                },
-                Parcel {
-                    id: Uuid::from_u128(2002),
-                    survey_number: "202".to_string(),
-                    owner_name: "Jayesh Shah".to_string(),
-                    area_hectares: 1.80,
-                    district_code: "VDR".to_string(),
-                },
-            ],
-            preliminary_notification_at: Some(Utc::now() - Duration::days(180)),
-            updated_at: Utc::now(),
-        };
-        let w2_id = Uuid::from_u128(202);
-        let h2 = sih_workflow::who_handles_stage(&ProjectStage::CompensationAward);
-        let w2 = WorkflowInstance {
-            id: w2_id,
-            project_id: p2_id,
-            authority: Authority::NationalHighways,
-            current_stage: ProjectStage::CompensationAward,
-            started_at: Utc::now() - Duration::days(180),
-            notification_at: Some(Utc::now() - Duration::days(180)),
-            deadline_at: Some(Utc::now() + Duration::days(185)),
-            completed_at: None,
-            lapsed_at: None,
-            responsible_department: Some(h2.department_code.to_string()),
-            responsible_role: Some(h2.role_code.to_string()),
-            stage_timeline_days: Some(h2.timeline_days),
-        };
-        projects.insert(p2_id, p2);
-        workflows.insert(w2_id, w2);
-        project_to_workflow.insert(p2_id, w2_id);
-
-        // Project 3: Eastern Freight Corridor
-        let p3_id = Uuid::from_u128(103);
-        let p3 = Project {
-            id: p3_id,
-            name: "Eastern Dedicated Freight Corridor".to_string(),
-            authority: Authority::Larr,
-            state_code: "UP".to_string(),
-            district_code: "VNS".to_string(),
-            stage: ProjectStage::PreliminaryNotification,
-            parcels: vec![Parcel {
-                id: Uuid::from_u128(3001),
-                survey_number: "512".to_string(),
-                owner_name: "Ram Prasad".to_string(),
-                area_hectares: 2.75,
-                district_code: "VNS".to_string(),
-            }],
-            preliminary_notification_at: Some(Utc::now() - Duration::days(30)),
-            updated_at: Utc::now(),
-        };
-        let w3_id = Uuid::from_u128(203);
-        let h3 = sih_workflow::who_handles_stage(&ProjectStage::PreliminaryNotification);
-        let w3 = WorkflowInstance {
-            id: w3_id,
-            project_id: p3_id,
-            authority: Authority::Larr,
-            current_stage: ProjectStage::PreliminaryNotification,
-            started_at: Utc::now() - Duration::days(30),
-            notification_at: Some(Utc::now() - Duration::days(30)),
-            deadline_at: Some(Utc::now() + Duration::days(335)),
-            completed_at: None,
-            lapsed_at: None,
-            responsible_department: Some(h3.department_code.to_string()),
-            responsible_role: Some(h3.role_code.to_string()),
-            stage_timeline_days: Some(h3.timeline_days),
-        };
-        projects.insert(p3_id, p3);
-        workflows.insert(w3_id, w3);
-        project_to_workflow.insert(p3_id, w3_id);
-
-        // Initial cryptographic audit log entries
-        let init_entry = AuditEntry::new(
-            1,
-            Uuid::from_u128(1),
-            "SYSTEM_INIT",
-            "system",
-            json!({"system": "SIH26016 LandFlow", "status": "operational"}),
-            "",
-        );
-        let second_entry = AuditEntry::new(
-            2,
-            Uuid::from_u128(1),
-            "PROJECT_SANCTIONED",
-            "project/11111111-1111-1111-1111-111111111111",
-            json!({"project": "NH-48 Package II", "status": "sanctioned"}),
-            init_entry.hash.clone(),
-        );
-        audit_log.push(init_entry);
-        audit_log.push(second_entry);
-
-        let mut objections = Vec::new();
-        objections.push(ObjectionRecord {
-            id: Uuid::from_u128(5001),
-            project_id: p1_id,
-            survey_number: "1043".to_string(),
-            owner_name: "Ramesh Patel".to_string(),
-            objection_type: "Valuation & Solatium".to_string(),
-            text: "Standing fruit orchard of 45 pomegranate trees not counted in joint measurement survey. Revaluation requested under Section 29.".to_string(),
-            status: "filed".to_string(),
-            filed_at: Utc::now() - Duration::days(5),
-            resolution: None,
-        });
-        objections.push(ObjectionRecord {
-            id: Uuid::from_u128(5002),
-            project_id: p2_id,
-            survey_number: "202".to_string(),
-            owner_name: "Jayesh Shah".to_string(),
-            objection_type: "Alignment Diversion".to_string(),
-            text: "Requested 15m shift to avoid cutting through residential irrigation pump house.".to_string(),
-            status: "heard".to_string(),
-            filed_at: Utc::now() - Duration::days(12),
-            resolution: Some("Site inspection conducted by SDM on 14 Aug 2026. Micro-alignment shifted by 8m.".to_string()),
-        });
-
-        let mut rehabilitation = HashMap::new();
-        rehabilitation.insert(p1_id, RehabilitationSummary {
-            project_id: p1_id,
-            affected_families_count: 38,
-            displaced_families_count: 12,
-            entitlements_total: 76,
-            entitlements_delivered: 54,
-            status: "in_progress".to_string(),
-            last_updated_at: Utc::now() - Duration::days(2),
-        });
-        rehabilitation.insert(p2_id, RehabilitationSummary {
-            project_id: p2_id,
-            affected_families_count: 24,
-            displaced_families_count: 6,
-            entitlements_total: 48,
-            entitlements_delivered: 44,
-            status: "nearing_completion".to_string(),
-            last_updated_at: Utc::now() - Duration::days(4),
-        });
-
-        let mut documents = Vec::new();
-        documents.push(DocumentRecord {
-            id: Uuid::from_u128(6001),
-            project_id: p1_id,
-            kind: "notice".to_string(),
-            file_name: "Gazette_Notification_Sec3A_NH48.pdf".to_string(),
-            content_hash: "a4f89d81e3c8b1a8d05e5bf67645163f92d4f8263a0bf643c1626f8d167699bc".to_string(),
-            version: 1,
-            signed_by: "District Magistrate".to_string(),
-            uploaded_at: Utc::now() - Duration::days(45),
-        });
-        documents.push(DocumentRecord {
-            id: Uuid::from_u128(6002),
-            project_id: p1_id,
-            kind: "sia_report".to_string(),
-            file_name: "SIA_Report_Bharatpur_Package2.pdf".to_string(),
-            content_hash: "8c14b72ef3d607ec51e122ea6013093c3e536fe4800e6134a7d6546644f1e317".to_string(),
-            version: 1,
-            signed_by: "SIA Agency".to_string(),
-            uploaded_at: Utc::now() - Duration::days(40),
-        });
-
-        let mut ehrms_employees = HashMap::new();
-        ehrms_employees.insert(
-            "EMP001".to_string(),
-            EhrmsEmployee {
-                id: "00000000-0000-0000-0000-000000000001".to_string(),
-                employee_id: "EMP001".to_string(),
-                name: "Raj Sharma".to_string(),
-                designation: "Collector".to_string(),
-                department: "District Administration".to_string(),
-                role: "COLLECTOR".to_string(),
-            },
-        );
-        ehrms_employees.insert(
-            "EMP002".to_string(),
-            EhrmsEmployee {
-                id: "00000000-0000-0000-0000-000000000002".to_string(),
-                employee_id: "EMP002".to_string(),
-                name: "Amit Verma".to_string(),
-                designation: "Revenue Officer".to_string(),
-                department: "Revenue Department".to_string(),
-                role: "REVENUE_OFFICER".to_string(),
-            },
-        );
-        ehrms_employees.insert(
-            "EMP003".to_string(),
-            EhrmsEmployee {
-                id: "00000000-0000-0000-0000-000000000003".to_string(),
-                employee_id: "EMP003".to_string(),
-                name: "Neha Singh".to_string(),
-                designation: "GIS Officer".to_string(),
-                department: "Survey Department".to_string(),
-                role: "GIS_OFFICER".to_string(),
-            },
-        );
-        ehrms_employees.insert(
-            "EMP004".to_string(),
-            EhrmsEmployee {
-                id: "00000000-0000-0000-0000-000000000004".to_string(),
-                employee_id: "EMP004".to_string(),
-                name: "Ravi Kumar".to_string(),
-                designation: "Finance Officer".to_string(),
-                department: "Finance Department".to_string(),
-                role: "FINANCE_OFFICER".to_string(),
-            },
-        );
-        ehrms_employees.insert(
-            "EMP005".to_string(),
-            EhrmsEmployee {
-                id: "00000000-0000-0000-0000-000000000005".to_string(),
-                employee_id: "EMP005".to_string(),
-                name: "Suresh Patel".to_string(),
-                designation: "Rehabilitation Officer".to_string(),
-                department: "R&R Department".to_string(),
-                role: "REHABILITATION_OFFICER".to_string(),
-            },
-        );
-        ehrms_employees.insert(
-            "EMP006".to_string(),
-            EhrmsEmployee {
-                id: "00000000-0000-0000-0000-000000000006".to_string(),
-                employee_id: "EMP006".to_string(),
-                name: "Praveen Singhal".to_string(),
-                designation: "Chief Project Officer".to_string(),
-                department: "Land Requiring Body (NHAI)".to_string(),
-                role: "LAND_REQUIRING_BODY".to_string(),
-            },
-        );
-        ehrms_employees.insert(
-            "EMP007".to_string(),
-            EhrmsEmployee {
-                id: "00000000-0000-0000-0000-000000000007".to_string(),
-                employee_id: "EMP007".to_string(),
-                name: "Dr. Arvinder Roy".to_string(),
-                designation: "SIA Officer".to_string(),
-                department: "Social Impact Assessment Unit".to_string(),
-                role: "SIA_OFFICER".to_string(),
-            },
-        );
-        ehrms_employees.insert(
-            "EMP008".to_string(),
-            EhrmsEmployee {
-                id: "00000000-0000-0000-0000-000000000008".to_string(),
-                employee_id: "EMP008".to_string(),
-                name: "Harish Meena".to_string(),
-                designation: "Additional Collector".to_string(),
-                department: "District Collectorate / CALA".to_string(),
-                role: "ADDITIONAL_COLLECTOR".to_string(),
-            },
-        );
-        ehrms_employees.insert(
-            "EMP009".to_string(),
-            EhrmsEmployee {
-                id: "00000000-0000-0000-0000-000000000009".to_string(),
-                employee_id: "EMP009".to_string(),
-                name: "Adv. Madhav Joshi".to_string(),
-                designation: "Legal Officer".to_string(),
-                department: "Legal & Litigation Cell".to_string(),
-                role: "LEGAL_OFFICER".to_string(),
-            },
-        );
-        ehrms_employees.insert(
-            "EMP010".to_string(),
-            EhrmsEmployee {
-                id: "00000000-0000-0000-0000-000000000010".to_string(),
-                employee_id: "EMP010".to_string(),
-                name: "Meenakshi Sundaram".to_string(),
-                designation: "Joint Secretary / Reviewer".to_string(),
-                department: "Appropriate Government / Oversight".to_string(),
-                role: "GOVERNMENT_REVIEWER".to_string(),
-            },
-        );
-
         Self {
-            projects,
-            workflows,
-            project_to_workflow,
-            approval_history,
-            audit_log,
-            objections,
-            rehabilitation,
-            documents,
-            ehrms_employees,
+            projects: HashMap::new(),
+            workflows: HashMap::new(),
+            project_to_workflow: HashMap::new(),
+            approval_history: HashMap::new(),
+            audit_log: Vec::new(),
+            objections: Vec::new(),
+            rehabilitation: HashMap::new(),
+            documents: Vec::new(),
+            ehrms_employees: HashMap::new(),
         }
     }
 }
@@ -2740,6 +2373,29 @@ async fn mock_ehrms_login(
     JsonBody(payload): JsonBody<MockEhrmsLoginPayload>,
 ) -> Result<Json<MockEhrmsLoginResponse>, ApiError> {
     let emp_id = payload.employee_id.trim().to_uppercase();
+
+    if let Some(ref pool) = state.pool {
+        if let Ok(row) = sqlx::query("SELECT id, employee_id, name, designation, department, role FROM users WHERE employee_id = $1")
+            .bind(&emp_id)
+            .fetch_one(pool)
+            .await
+        {
+            use sqlx::Row;
+            let id: Uuid = row.get("id");
+            return Ok(Json(MockEhrmsLoginResponse {
+                success: true,
+                employee: EhrmsEmployee {
+                    id: id.to_string(),
+                    employee_id: row.get("employee_id"),
+                    name: row.get("name"),
+                    designation: row.get("designation"),
+                    department: row.get("department"),
+                    role: row.get("role"),
+                }
+            }));
+        }
+    }
+
     let in_mem = state.in_memory.read().unwrap();
     if let Some(employee) = in_mem.ehrms_employees.get(&emp_id) {
         Ok(Json(MockEhrmsLoginResponse {
@@ -2757,6 +2413,31 @@ async fn mock_ehrms_login(
 async fn list_mock_ehrms_employees(
     State(state): State<AppState>,
 ) -> Json<Vec<EhrmsEmployee>> {
+    if let Some(ref pool) = state.pool {
+        if let Ok(records) = sqlx::query("SELECT id, employee_id, name, designation, department, role FROM users")
+            .fetch_all(pool)
+            .await
+        {
+            use sqlx::Row;
+            let mut list = Vec::new();
+            for row in records {
+                let id: Uuid = row.get("id");
+                list.push(EhrmsEmployee {
+                    id: id.to_string(),
+                    employee_id: row.get("employee_id"),
+                    name: row.get("name"),
+                    designation: row.get("designation"),
+                    department: row.get("department"),
+                    role: row.get("role"),
+                });
+            }
+            if !list.is_empty() {
+                list.sort_by(|a, b| a.employee_id.cmp(&b.employee_id));
+                return Json(list);
+            }
+        }
+    }
+
     let in_mem = state.in_memory.read().unwrap();
     let mut list: Vec<EhrmsEmployee> = in_mem.ehrms_employees.values().cloned().collect();
     list.sort_by(|a, b| a.employee_id.cmp(&b.employee_id));

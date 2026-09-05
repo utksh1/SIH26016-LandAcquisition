@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   apiClient,
   isApiConfigured,
-  demoEhrmsEmployees,
   type EhrmsEmployee,
   type MapParcelFeature,
   type DilrmpLookupResult,
@@ -14,19 +13,40 @@ import {
   type DepartmentInfo,
   type ObjectionItem,
   type RehabilitationInfo,
-  type DocumentItem,
-} from './api/client'
-import {
-  kpis,
-  notices,
-  projects as mockProjects,
-  selectedProject as mockSelectedProject,
   type ApiProject,
   type Language,
   type Project,
   type ProjectStage,
   type Role,
-} from './api/mockData'
+} from './api/client'
+
+const DEFAULT_PROJECT: Project = {
+  id: '',
+  name: '',
+  code: '',
+  location: '',
+  parcels: 0,
+  acquired: 0,
+  stage: 'Proposal Creation',
+  stageIndex: 0,
+  status: 'On track' as const,
+  due: '',
+  owner: '',
+  amount: '',
+}
+
+const kpis = [
+  { label: 'Active projects', value: '42', delta: '+6 this quarter', tone: 'mint', icon: '⌁' },
+  { label: 'Land acquired', value: '68.4%', delta: '+4.8% vs last month', tone: 'gold', icon: '◒' },
+  { label: 'Compensation pending', value: '₹312 Cr', delta: '18 awards need action', tone: 'coral', icon: '₹' },
+  { label: 'Days to next gate', value: '13', delta: 'NH-48 · 18 Sep 2026', tone: 'blue', icon: '↗' },
+]
+
+const notices = [
+  { label: 'GATE 04', title: 'Compensation award pack needs approval', detail: '12 of 18 village-level packets are ready for CALA sign-off.', tone: 'coral' },
+  { label: 'PFMS', title: '₹46.2 Cr released to district escrow', detail: 'Settlement batch PF-2026-091 cleared 06 Sep 2026.', tone: 'mint' },
+  { label: 'R&R', title: 'Household verification window closes soon', detail: 'Kushinagar submissions close in 9 days.', tone: 'gold' },
+]
 
 type IconName =
   | 'grid'
@@ -629,11 +649,58 @@ export default function App() {
   const [showMobileNav, setShowMobileNav] = useState(false)
 
   // Core Data
-  const [projects, setProjects] = useState<Project[]>(mockProjects)
-  const [selected, setSelected] = useState<Project>(mockSelectedProject)
-  const [currentStageIdx, setCurrentStageIdx] = useState(1) // Default to Stage 1: Land Verification
+  const [projects, setProjects] = useState<Project[]>([])
+  const [selected, setSelected] = useState<Project>(DEFAULT_PROJECT)
+  const [currentStageIdx, setCurrentStageIdx] = useState(0)
   const [loading, setLoading] = useState(false)
   const [toastMessage, setToastMessage] = useState<string | null>(null)
+  const [backendError, setBackendError] = useState(false)
+
+  // Fetch initial projects
+  useEffect(() => {
+    apiClient.getProjects().then((apiProjs) => {
+      if (!apiProjs || apiProjs.length === 0) return
+      
+      const mapped = apiProjs.map(p => ({
+        id: p.id,
+        name: p.name,
+        code: `PRJ-${p.id.substring(0, 6).toUpperCase()}`,
+        location: `${p.district_code} · ${p.state_code}`,
+        parcels: p.parcels?.length || 0,
+        acquired: 0,
+        stage: (p.stage || 'Proposal Creation') as any,
+        stageIndex: 0,
+        status: 'On track' as const,
+        due: '30 Nov 2026',
+        owner: 'National Highways Authority',
+        amount: '₹240 Cr'
+      }))
+      setProjects(mapped)
+      setSelected(mapped[0])
+      setBackendError(false)
+    }).catch(err => {
+      console.error('Backend unreachable:', err)
+      setBackendError(true)
+    })
+  }, [])
+
+  // Sync current stage index
+  const syncWorkflowStatus = async (projectId: string) => {
+    try {
+      const status = await apiClient.getWorkflowStatus(projectId)
+      const stageName = status.current_stage_name
+      const idx = rfctlarrStages.findIndex(s => s.name === stageName || s.stageCode === status.current_stage)
+      if (idx >= 0) setCurrentStageIdx(idx)
+    } catch (err) {
+      console.error('Failed to sync workflow status', err)
+    }
+  }
+
+  useEffect(() => {
+    if (selected.id) {
+      syncWorkflowStatus(selected.id)
+    }
+  }, [selected.id])
 
   // Modals & Panels
   const [showCreateModal, setShowCreateModal] = useState(false)
@@ -692,6 +759,7 @@ export default function App() {
   // Workflows & Regimes
   const [regimes, setRegimes] = useState<WorkflowRegime[]>([])
   const [departments, setDepartments] = useState<DepartmentInfo[]>([])
+  const [ehrmsEmployees, setEhrmsEmployees] = useState<EhrmsEmployee[]>([])
 
   // Objections State
   const [objectionSurvey, setObjectionSurvey] = useState('1043')
@@ -703,7 +771,7 @@ export default function App() {
   const [objectionsList, setObjectionsList] = useState<ObjectionItem[]>([
     {
       id: 'obj-1',
-      project_id: mockSelectedProject.id,
+      project_id: '',
       survey_number: '1043',
       owner_name: 'Ramesh Patel',
       objection_type: 'Valuation & Solatium',
@@ -716,7 +784,7 @@ export default function App() {
 
   // R&R State
   const [rehabData, setRehabData] = useState<RehabilitationInfo>({
-    project_id: mockSelectedProject.id,
+    project_id: '',
     affected_families_count: 38,
     displaced_families_count: 12,
     entitlements_total: 76,
@@ -745,10 +813,11 @@ export default function App() {
     const fetchInit = async () => {
       setLoading(true)
       try {
-        const [apiProj, reg, dept] = await Promise.all([
+        const [apiProj, reg, dept, ehrms] = await Promise.all([
           apiClient.listProjects().catch(() => []),
           apiClient.listWorkflowRegimes().catch(() => []),
           apiClient.listDepartments().catch(() => []),
+          apiClient.listMockEhrmsEmployees().catch(() => []),
         ])
 
         if (apiProj.length > 0) {
@@ -772,6 +841,7 @@ export default function App() {
 
         if (reg.length > 0) setRegimes(reg)
         if (dept.length > 0) setDepartments(dept)
+        if (ehrms.length > 0) setEhrmsEmployees(ehrms)
       } catch (err) {
         console.error('Initial load error:', err)
       } finally {
@@ -797,7 +867,7 @@ export default function App() {
         if (persona) {
           setActivePersona(persona)
           if (persona.employeeId) {
-            const emp = demoEhrmsEmployees.find((e) => e.employee_id === persona.employeeId)
+            const emp = ehrmsEmployees.find((e) => e.employee_id === persona.employeeId)
             if (emp) setAuthEmployee(emp)
           } else {
             setAuthEmployee(null)
@@ -815,7 +885,7 @@ export default function App() {
   const handleLogin = (persona: StakeholderPersona) => {
     setActivePersona(persona)
     if (persona.employeeId) {
-      const emp = demoEhrmsEmployees.find((e) => e.employee_id === persona.employeeId)
+      const emp = ehrmsEmployees.find((e) => e.employee_id === persona.employeeId)
       if (emp) setAuthEmployee(emp)
     } else {
       setAuthEmployee(null)
@@ -887,7 +957,12 @@ export default function App() {
     setGateSubmitting(true)
     setGateError(null)
     try {
-      await apiClient.approveWorkflow(selected.id, stage.stageCode as any, gateDocs, gateRemarks)
+      await apiClient.approveWorkflow(selected.id, {
+        user: authEmployee?.employee_id || activePersona.employeeId || 'EMP001',
+        decision: 'APPROVE',
+        remarks: gateRemarks,
+        documents: gateDocs,
+      })
       
       const nextIdx = currentStageIdx + 1
       if (nextIdx >= rfctlarrStages.length) {
@@ -904,6 +979,7 @@ export default function App() {
       setGateDocs([])
       setGateRemarks('')
       handleOpenAudit()
+      syncWorkflowStatus(selected.id)
     } catch (err: any) {
       setGateError(err.message || 'Failed to approve gate')
     } finally {
@@ -921,12 +997,17 @@ export default function App() {
     setGateSubmitting(true)
     setGateError(null)
     try {
-      await apiClient.rejectWorkflow(selected.id, stage.stageCode as any, gateRemarks)
+      await apiClient.rejectWorkflow(selected.id, {
+        user: authEmployee?.employee_id || activePersona.employeeId || 'EMP001',
+        decision: 'REJECT',
+        remarks: gateRemarks,
+      })
       showToast('Returned to previous department for rectification.')
       setShowGateReviewModal(false)
       setGateDocs([])
       setGateRemarks('')
       handleOpenAudit()
+      syncWorkflowStatus(selected.id)
     } catch (err: any) {
       setGateError(err.message || 'Failed to reject gate')
     } finally {
@@ -1150,7 +1231,9 @@ export default function App() {
             <button
               className="secondary-button"
               onClick={() => {
-                apiClient.listWorkflowRegimes().then(setRegimes).catch(() => {})
+                apiClient.listWorkflowRegimes().then(setRegimes).catch(console.error)
+                apiClient.listDepartments().then(setDepartments).catch(console.error)
+                apiClient.listMockEhrmsEmployees().then(setEhrmsEmployees).catch(console.error)
                 setShowRegimesModal(true)
               }}
             >
@@ -1407,7 +1490,7 @@ export default function App() {
                 </div>
 
                 <div className="ehrms-demo-grid">
-                  {demoEhrmsEmployees.map((emp) => (
+                  {ehrmsEmployees.map((emp) => (
                     <div
                       key={emp.employee_id}
                       className={`ehrms-emp-card ${ehrmsEmployeeId === emp.employee_id ? 'selected' : ''}`}
@@ -1446,6 +1529,16 @@ export default function App() {
   // ----------------------------------------------------
   return (
     <div className="app-shell">
+      {backendError && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, zIndex: 99999,
+          background: '#dc2626', color: '#fff', padding: '12px 20px',
+          textAlign: 'center', fontWeight: 'bold', fontSize: 14
+        }}>
+          ⚠️ Backend unreachable. Start the API with `cargo run` in services/api/.
+        </div>
+      )}
+
       {/* Toast Notification */}
       {toastMessage && (
         <div

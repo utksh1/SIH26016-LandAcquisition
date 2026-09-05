@@ -18,7 +18,12 @@ VALUES
     ('EMP002', 'Amit Verma', 'Revenue Officer', 'Revenue Department', 'REVENUE_OFFICER'),
     ('EMP003', 'Neha Singh', 'GIS Officer', 'Survey Department', 'GIS_OFFICER'),
     ('EMP004', 'Ravi Kumar', 'Finance Officer', 'Finance Department', 'FINANCE_OFFICER'),
-    ('EMP005', 'Suresh Patel', 'Rehabilitation Officer', 'R&R Department', 'REHABILITATION_OFFICER')
+    ('EMP005', 'Suresh Patel', 'Rehabilitation Officer', 'R&R Department', 'REHABILITATION_OFFICER'),
+    ('EMP006', 'Praveen Singhal', 'Chief Project Officer', 'Land Requiring Body (NHAI)', 'LAND_REQUIRING_BODY'),
+    ('EMP007', 'Dr. Arvinder Roy', 'SIA Officer', 'Social Impact Assessment Unit', 'SIA_OFFICER'),
+    ('EMP008', 'Harish Meena', 'Additional Collector', 'District Collectorate / CALA', 'ADDITIONAL_COLLECTOR'),
+    ('EMP009', 'Adv. Madhav Joshi', 'Legal Officer', 'Legal & Litigation Cell', 'LEGAL_OFFICER'),
+    ('EMP010', 'Meenakshi Sundaram', 'Joint Secretary / Reviewer', 'Appropriate Government / Oversight', 'GOVERNMENT_REVIEWER')
 ON CONFLICT (employee_id) DO UPDATE SET
     name = EXCLUDED.name,
     designation = EXCLUDED.designation,

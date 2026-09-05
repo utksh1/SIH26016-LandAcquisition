@@ -1,7 +1,7 @@
 -- SIH26016 MVP schema: PostgreSQL 16 + PostGIS.
 -- Apply with: psql "$DATABASE_URL" -f db/migrations/001_initial.sql
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
-CREATE EXTENSION IF NOT EXISTS postgis;
+-- CREATE EXTENSION IF NOT EXISTS postgis;
 
 CREATE TYPE authority_code AS ENUM ('larr', 'national_highways');
 CREATE TYPE project_status AS ENUM ('draft', 'land_verification', 'notification', 'objection_period', 'award_generation', 'compensation', 'possession', 'completed', 'lapsed');
@@ -71,7 +71,7 @@ CREATE TABLE project (
     district_code TEXT NOT NULL CHECK (district_code ~ '^[A-Za-z0-9_-]{2,64}$'),
     status project_status NOT NULL DEFAULT 'draft',
     budget_paise NUMERIC(20,0) NOT NULL DEFAULT 0 CHECK (budget_paise >= 0),
-    alignment geometry(Geometry, 4326),
+    alignment JSONB,
     created_by UUID REFERENCES app_user(id),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -105,8 +105,8 @@ CREATE TABLE parcel (
     area_hectares NUMERIC(14,6) NOT NULL CHECK (area_hectares > 0),
     status parcel_status NOT NULL DEFAULT 'verification_pending',
     district_code TEXT NOT NULL,
-    boundary geometry(Polygon, 4326),
-    centroid geometry(Point, 4326),
+    boundary JSONB,
+    centroid JSONB,
     source_system TEXT,
     source_retrieved_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -365,9 +365,7 @@ CREATE TABLE kpi_snapshot (
     UNIQUE (tenant_id, snapshot_date, scope_level, scope_code)
 );
 
-CREATE INDEX parcel_boundary_gix ON parcel USING GIST (boundary);
-CREATE INDEX parcel_centroid_gix ON parcel USING GIST (centroid);
-CREATE INDEX project_alignment_gix ON project USING GIST (alignment);
+
 CREATE INDEX parcel_project_idx ON parcel (project_id, status);
 CREATE INDEX audit_entity_idx ON audit_log (entity_type, entity_id, occurred_at DESC);
 CREATE INDEX outbox_unpublished_idx ON outbox_event (occurred_at) WHERE published_at IS NULL;
