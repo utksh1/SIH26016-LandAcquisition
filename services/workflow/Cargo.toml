@@ -7,3 +7,6 @@ edition.workspace = true
 chrono.workspace = true
 sih-domain = { path = "../domain" }
 uuid.workspace = true
+sqlx = { version = "0.8", features = ["runtime-tokio-native-tls", "postgres", "uuid", "chrono"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true

@@ -9,3 +9,7 @@ serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
 uuid.workspace = true
+sqlx = { version = "0.8", features = ["postgres", "runtime-tokio-native-tls", "uuid", "chrono", "json", "rust_decimal"] }
+tokio.workspace = true
+async-trait = "0.1"
+rust_decimal = "1.36"

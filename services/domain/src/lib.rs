@@ -4,6 +4,9 @@ use sha2::{Digest, Sha256};
 use std::{error::Error, fmt};
 use uuid::Uuid;
 
+pub mod db;
+pub mod repository;
+
 pub type ProjectId = Uuid;
 pub type ParcelId = Uuid;
 pub type UserId = Uuid;
@@ -950,6 +953,35 @@ pub trait StakeholderRepository: Send + Sync {
 pub trait AuditRepository: Send + Sync {
     fn append_audit(&self, entry: AuditEntry);
     fn list_audit(&self) -> Vec<AuditEntry>;
+}
+
+// Async repository traits for PostgreSQL
+#[async_trait::async_trait]
+pub trait AsyncProjectRepository: Send + Sync {
+    async fn list_projects(&self) -> Result<Vec<Project>, Box<dyn Error + Send + Sync>>;
+    async fn get_project(&self, id: ProjectId) -> Result<Option<Project>, Box<dyn Error + Send + Sync>>;
+    async fn save_project(&self, project: &Project) -> Result<(), Box<dyn Error + Send + Sync>>;
+}
+
+#[async_trait::async_trait]
+pub trait AsyncParcelRepository: Send + Sync {
+    async fn list_parcels(&self, project_id: ProjectId) -> Result<Vec<Parcel>, Box<dyn Error + Send + Sync>>;
+    async fn get_parcel(&self, id: ParcelId) -> Result<Option<Parcel>, Box<dyn Error + Send + Sync>>;
+    async fn save_parcel(&self, project_id: ProjectId, parcel: &Parcel) -> Result<(), Box<dyn Error + Send + Sync>>;
+}
+
+#[async_trait::async_trait]
+pub trait AsyncUserRepository: Send + Sync {
+    async fn list_users(&self) -> Result<Vec<User>, Box<dyn Error + Send + Sync>>;
+    async fn get_user(&self, id: UserId) -> Result<Option<User>, Box<dyn Error + Send + Sync>>;
+    async fn save_user(&self, user: &User) -> Result<(), Box<dyn Error + Send + Sync>>;
+}
+
+#[async_trait::async_trait]
+pub trait AsyncOwnerRepository: Send + Sync {
+    async fn list_owners(&self) -> Result<Vec<Owner>, Box<dyn Error + Send + Sync>>;
+    async fn get_owner(&self, id: OwnerId) -> Result<Option<Owner>, Box<dyn Error + Send + Sync>>;
+    async fn save_owner(&self, owner: &Owner) -> Result<(), Box<dyn Error + Send + Sync>>;
 }
 
 #[cfg(test)]

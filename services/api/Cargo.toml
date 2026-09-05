@@ -9,11 +9,13 @@ chrono.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
+sqlx = { version = "0.8", features = ["postgres", "runtime-tokio-native-tls", "uuid", "chrono"] }
 tokio.workspace = true
 tower-http.workspace = true
 uuid.workspace = true
 sih-domain = { path = "../domain" }
 sih-workflow = { path = "../workflow" }
+sih-integrations = { path = "../integrations" }
 
 [dev-dependencies]
 tower = "0.5"
