@@ -867,13 +867,7 @@ export default function App() {
     area: number
     status: 'Completed' | 'Processing' | 'Disputed'
     ulpin: string
-  } | null>({
-    survey: '1042',
-    owner: 'Asha Devi / Ramesh Patel',
-    area: 1.25,
-    status: 'Processing',
-    ulpin: 'RJ-BTP-1042-8821',
-  })
+  } | null>(null)
 
   // Tool Studio Tabs
   const [toolTab, setToolTab] = useState<'dilrmp' | 'pfms' | 'notice' | 'delay'>('dilrmp')
@@ -908,6 +902,26 @@ export default function App() {
   const [regimes, setRegimes] = useState<WorkflowRegime[]>([])
   const [departments, setDepartments] = useState<DepartmentInfo[]>([])
   const [ehrmsEmployees, setEhrmsEmployees] = useState<EhrmsEmployee[]>([])
+
+  // Resolve a persona's name/designation/department from the DB-backed eHRMS
+  // employee list, falling back to the hardcoded persona metadata only if the
+  // employee is not found in the DB. This eliminates the previous drift
+  // between persona.name (hardcoded in TS) and users.name (in migration 002).
+  const resolvePersonaName = (persona: StakeholderPersona): string => {
+    if (!persona.employeeId) return persona.name
+    const emp = ehrmsEmployees.find((e) => e.employee_id === persona.employeeId)
+    return emp?.name || persona.name
+  }
+  const resolvePersonaDesignation = (persona: StakeholderPersona): string => {
+    if (!persona.employeeId) return persona.designation
+    const emp = ehrmsEmployees.find((e) => e.employee_id === persona.employeeId)
+    return emp?.designation || persona.designation
+  }
+  const resolvePersonaDepartment = (persona: StakeholderPersona): string => {
+    if (!persona.employeeId) return persona.department
+    const emp = ehrmsEmployees.find((e) => e.employee_id === persona.employeeId)
+    return emp?.department || persona.department
+  }
 
   // Objections State
   const [objectionSurvey, setObjectionSurvey] = useState('1043')
@@ -1040,8 +1054,9 @@ export default function App() {
     }
     setPortalView('dashboard')
     window.location.hash = persona.dashboardRoute
-    apiClient.login(persona.role, persona.name).catch(() => {})
-    showToast(`Active Session: ${persona.title} (${persona.name})`)
+    const resolvedName = resolvePersonaName(persona)
+    apiClient.login(persona.role, resolvedName).catch(() => {})
+    showToast(`Active Session: ${persona.title} (${resolvedName})`)
   }
 
   // Handle Mock eHRMS Authentication
@@ -1315,7 +1330,7 @@ export default function App() {
       stageIndex: 0,
       status: 'On track',
       due: '30 Nov 2026',
-      owner: activePersona.name,
+      owner: resolvePersonaName(activePersona),
       amount: `₹${newProjectBudget} Cr`,
     }
     setProjects([newProj, ...projects])
@@ -1488,8 +1503,8 @@ export default function App() {
               <div className="persona-officer">
                 <Icon name={persona.icon} size={20} />
                 <div>
-                  <strong>{persona.name}</strong>
-                  <small>{persona.designation}</small>
+                  <strong>{resolvePersonaName(persona)}</strong>
+                  <small>{resolvePersonaDesignation(persona)}</small>
                 </div>
               </div>
               <p className="persona-desc">{persona.description}</p>
@@ -1755,7 +1770,7 @@ export default function App() {
             <strong style={{ fontSize: 12, color: '#eef4ed', display: 'block' }}>
               {activePersona.title}
             </strong>
-            <small style={{ color: '#8da79a', fontSize: 10 }}>{activePersona.name}</small>
+            <small style={{ color: '#8da79a', fontSize: 10 }}>{resolvePersonaName(activePersona)}</small>
           </div>
         </div>
 
@@ -1849,10 +1864,10 @@ export default function App() {
                 ) : (
                   <>
                     <strong style={{ display: 'block', lineHeight: 1.1 }}>
-                      {activePersona.name}
+                      {resolvePersonaName(activePersona)}
                     </strong>
                     <small style={{ color: '#a0b5ab', fontSize: 10 }}>
-                      {activePersona.title} ({activePersona.department})
+                      {activePersona.title} ({resolvePersonaDepartment(activePersona)})
                     </small>
                   </>
                 )}
@@ -1912,9 +1927,9 @@ export default function App() {
             <div>
               <p className="eyebrow">
                 <span className="eyebrow-line" />
-                {activePersona.department} · {activePersona.designation}
+                {resolvePersonaDepartment(activePersona)} · {resolvePersonaDesignation(activePersona)}
               </p>
-              <h1>Good morning, {activePersona.name}</h1>
+              <h1>Good morning, {resolvePersonaName(activePersona)}</h1>
               <p className="welcome-copy">{activePersona.description}</p>
             </div>
             <div className="sync-card">
@@ -2156,7 +2171,7 @@ export default function App() {
                         <span>🏛 Collector Statutory Portal (/dashboard/collector)</span>
                       </h3>
                       <p style={{ margin: '4px 0 0', fontSize: 12, color: '#556c5e' }}>
-                        Officer: <strong>Raj Sharma, IAS (Collector & CALA) [EMP001]</strong> · Competent Authority under RFCTLARR Act 2013
+                        Officer: <strong>{resolvePersonaName(activePersona)} ({resolvePersonaDesignation(activePersona)}) [{activePersona.employeeId}]</strong> · Competent Authority under RFCTLARR Act 2013
                       </p>
                     </div>
                     <div style={{ display: 'flex', gap: 8 }}>
@@ -2254,7 +2269,7 @@ export default function App() {
                         <span>📜 Revenue Officer Portal (/dashboard/revenue)</span>
                       </h3>
                       <p style={{ margin: '4px 0 0', fontSize: 12, color: '#556c5e' }}>
-                        Officer: <strong>Amit Verma (Revenue Officer & Tehsildar) [EMP002]</strong> · Land Records & DILRMP Title Verification
+                        Officer: <strong>{resolvePersonaName(activePersona)} ({resolvePersonaDesignation(activePersona)}) [{activePersona.employeeId}]</strong> · Land Records & DILRMP Title Verification
                       </p>
                     </div>
                     <button
@@ -2364,7 +2379,7 @@ export default function App() {
                         <span>🗺 GIS Officer Portal (/dashboard/gis)</span>
                       </h3>
                       <p style={{ margin: '4px 0 0', fontSize: 12, color: '#556c5e' }}>
-                        Officer: <strong>Neha Singh (GIS Officer & Geo-Specialist) [EMP003]</strong> · Cadastral Boundary & Corridor Alignment
+                        Officer: <strong>{resolvePersonaName(activePersona)} ({resolvePersonaDesignation(activePersona)}) [{activePersona.employeeId}]</strong> · Cadastral Boundary & Corridor Alignment
                       </p>
                     </div>
                     <button
@@ -2425,7 +2440,7 @@ export default function App() {
                         <span>💳 Finance Officer Portal (/dashboard/finance)</span>
                       </h3>
                       <p style={{ margin: '4px 0 0', fontSize: 12, color: '#556c5e' }}>
-                        Officer: <strong>Ravi Kumar (Finance Officer & Accounts Controller) [EMP004]</strong> · Direct Benefit Transfer (DBT)
+                        Officer: <strong>{resolvePersonaName(activePersona)} ({resolvePersonaDesignation(activePersona)}) [{activePersona.employeeId}]</strong> · Direct Benefit Transfer (DBT)
                       </p>
                     </div>
                     <button
@@ -2490,7 +2505,7 @@ export default function App() {
                         <span>🏡 Rehabilitation Officer Portal (/dashboard/rehabilitation)</span>
                       </h3>
                       <p style={{ margin: '4px 0 0', fontSize: 12, color: '#556c5e' }}>
-                        Officer: <strong>Suresh Patel (Rehabilitation Officer) [EMP005]</strong> · Schedule II Resettlement Entitlements
+                        Officer: <strong>{resolvePersonaName(activePersona)} ({resolvePersonaDesignation(activePersona)}) [{activePersona.employeeId}]</strong> · Schedule II Resettlement Entitlements
                       </p>
                     </div>
                     <button
@@ -2632,7 +2647,7 @@ export default function App() {
                         <span>👥 SIA Officer Console (/dashboard/sia)</span>
                       </h3>
                       <p style={{ margin: '4px 0 0', fontSize: 12, color: '#556c5e' }}>
-                        Officer: <strong>Dr. Arvinder Roy (SIA Commissioner) [EMP007]</strong> · Conducts Section 4–9 SIA study, public consultations, and SIMP
+                        Officer: <strong>{resolvePersonaName(activePersona)} ({resolvePersonaDesignation(activePersona)}) [{activePersona.employeeId}]</strong> · Conducts Section 4–9 SIA study, public consultations, and SIMP
                       </p>
                     </div>
                     <div style={{ display: 'flex', gap: 8 }}>
@@ -2693,7 +2708,7 @@ export default function App() {
                         <span>⚖️ Legal Officer Console (/dashboard/legal)</span>
                       </h3>
                       <p style={{ margin: '4px 0 0', fontSize: 12, color: '#556c5e' }}>
-                        Officer: <strong>Adv. Madhav Joshi (Legal Counsel) [EMP009]</strong> · Scrutinizes awards, manages court stays, assembles Section 64 reference bundles
+                        Officer: <strong>{resolvePersonaName(activePersona)} ({resolvePersonaDesignation(activePersona)}) [{activePersona.employeeId}]</strong> · Scrutinizes awards, manages court stays, assembles Section 64 reference bundles
                       </p>
                     </div>
                     <div style={{ display: 'flex', gap: 8 }}>
@@ -2751,7 +2766,7 @@ export default function App() {
                         <span>📋 Additional Collector Console (/dashboard/addl-collector)</span>
                       </h3>
                       <p style={{ margin: '4px 0 0', fontSize: 12, color: '#556c5e' }}>
-                        Officer: <strong>Harish Meena (Additional Collector) [EMP008]</strong> · Award scrutiny, Section 19 declarations, multi-tehsil coordination
+                        Officer: <strong>{resolvePersonaName(activePersona)} ({resolvePersonaDesignation(activePersona)}) [{activePersona.employeeId}]</strong> · Award scrutiny, Section 19 declarations, multi-tehsil coordination
                       </p>
                     </div>
                     <div style={{ display: 'flex', gap: 8 }}>
@@ -2807,7 +2822,7 @@ export default function App() {
                         <span>🇮🇳 Government Reviewer Console (/dashboard/oversight)</span>
                       </h3>
                       <p style={{ margin: '4px 0 0', fontSize: 12, color: '#556c5e' }}>
-                        Officer: <strong>Meenakshi Sundaram (Joint Secretary, DoLR) [EMP010]</strong> · Issues Section 19 declarations, monitors national corridors, audits regime compliance
+                        Officer: <strong>{resolvePersonaName(activePersona)} ({resolvePersonaDesignation(activePersona)}) [{activePersona.employeeId}]</strong> · Issues Section 19 declarations, monitors national corridors, audits regime compliance
                       </p>
                     </div>
                     <div style={{ display: 'flex', gap: 8 }}>
@@ -2999,6 +3014,14 @@ export default function App() {
                       <div style={{ color: '#556c5e', fontSize: 10 }}>Area: {selectedParcel.area} Ha</div>
                       <div style={{ font: '10px "DM Mono"', color: '#7c8e84', marginTop: 4 }}>
                         ULPIN: {selectedParcel.ulpin}
+                      </div>
+                    </div>
+                  )}
+                  {!selectedParcel && (
+                    <div className="parcel-popup" style={{ opacity: 0.85 }}>
+                      <div style={{ fontWeight: 600, color: '#10251f', fontSize: 11 }}>Parcel Inspector</div>
+                      <div style={{ color: '#7c8e84', fontSize: 10, marginTop: 2 }}>
+                        Click any cadastral parcel on the map to inspect survey, owner, area, and ULPIN.
                       </div>
                     </div>
                   )}

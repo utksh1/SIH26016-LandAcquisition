@@ -10,8 +10,13 @@ services:
     volumes:
       - landflow_pgdata:/var/lib/postgresql/data
       - ../../db/migrations/001_initial.sql:/docker-entrypoint-initdb.d/001_initial.sql:ro
-      - ../../db/seeds/demo.sql:/docker-entrypoint-initdb.d/002_demo.sql:ro
-      - ../../db/fixtures/workflow.sql:/docker-entrypoint-initdb.d/003_workflow.sql:ro
+      - ../../db/migrations/002_ehrms_users.sql:/docker-entrypoint-initdb.d/002_ehrms_users.sql:ro
+      - ../../db/migrations/003_legal_workflow_engine.sql:/docker-entrypoint-initdb.d/003_legal_workflow_engine.sql:ro
+      - ../../db/migrations/004_workflow_instance_fk.sql:/docker-entrypoint-initdb.d/004_workflow_instance_fk.sql:ro
+      - ../../db/migrations/005_audit_and_workflow_persistence.sql:/docker-entrypoint-initdb.d/005_audit_and_workflow_persistence.sql:ro
+      - ../../db/migrations/006_reenable_postgis.sql:/docker-entrypoint-initdb.d/006_reenable_postgis.sql:ro
+      - ../../db/seeds/demo.sql:/docker-entrypoint-initdb.d/007_demo.sql:ro
+      - ../../db/fixtures/workflow.sql:/docker-entrypoint-initdb.d/008_workflow.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
