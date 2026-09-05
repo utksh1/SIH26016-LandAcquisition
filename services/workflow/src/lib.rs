@@ -4,6 +4,8 @@ use sih_domain::{Authority, DepartmentInfo, Project, ProjectStage, Role, RoleInf
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
+pub mod timeline;
+
 /// 15 Statutory Legal Stages under RFCTLARR Act 2013 and Master Reference Standard
 pub const LEGAL_STAGE_LABELS: [&str; 15] = [
     "Proposal Initiation",
