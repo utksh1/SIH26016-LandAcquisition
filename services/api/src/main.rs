@@ -19,12 +19,12 @@ async fn main() {
                 Some(p)
             }
             Err(e) => {
-                println!("PostgreSQL not reachable ({}). Running in resilient standalone demo mode.", e);
+                eprintln!("CRITICAL: PostgreSQL database unreachable ({}). Database connection is required. Data endpoints will return 503 Service Unavailable.", e);
                 None
             }
         }
     } else {
-        println!("DATABASE_URL not set. Running in resilient standalone demo mode with preseeded data.");
+        eprintln!("CRITICAL: DATABASE_URL environment variable is not set. Database connection is required. Data endpoints will return 503 Service Unavailable.");
         None
     };
 

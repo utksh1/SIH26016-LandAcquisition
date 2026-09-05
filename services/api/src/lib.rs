@@ -85,6 +85,23 @@ pub struct UpdateRehabilitationPayload {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DashboardKpi {
+    pub label: String,
+    pub value: String,
+    pub delta: String,
+    pub tone: String,
+    pub icon: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct AlertNotice {
+    pub label: String,
+    pub title: String,
+    pub detail: String,
+    pub tone: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DocumentRecord {
     pub id: Uuid,
     pub project_id: ProjectId,
@@ -210,93 +227,17 @@ pub struct InMemoryStore {
 }
 
 impl InMemoryStore {
-    pub fn seeded() -> Self {
-        let mut ehrms_employees = HashMap::new();
-        let emps = vec![
-            ("EMP001", "Raj Sharma", "Collector", "Revenue & Disaster Management", "COLLECTOR"),
-            ("EMP002", "Amit Verma", "Revenue Officer / Tehsildar", "Land Records & Revenue", "REVENUE_OFFICER"),
-            ("EMP003", "Neha Singh", "GIS & Survey Officer", "Survey & Geo-informatics", "GIS_OFFICER"),
-            ("EMP004", "Ravi Kumar", "Accounts Officer", "Finance & PFMS Cell", "FINANCE_OFFICER"),
-            ("EMP005", "Suresh Patel", "Rehabilitation Officer", "Resettlement & Rehabilitation", "REHABILITATION_OFFICER"),
-            ("EMP006", "Praveen Singhal", "Chief Project Officer", "National Highways Authority of India", "LAND_REQUIRING_BODY"),
-            ("EMP007", "Dr. Arvinder Roy", "SIA Commissioner", "Directorate of Social Impact", "SIA_OFFICER"),
-            ("EMP008", "Kavita Nair", "Additional Collector", "District Revenue Collectorate", "ADDITIONAL_COLLECTOR"),
-            ("EMP009", "Adv. Madhav Joshi", "Legal Counsel", "Litigation & Legal Scrutiny Cell", "LEGAL_OFFICER"),
-            ("EMP010", "Meenakshi Sundaram", "Secretary (Land Resources)", "Department of Land Resources", "GOVERNMENT_REVIEWER"),
-        ];
-        for (eid, name, desig, dept, role) in emps {
-            ehrms_employees.insert(
-                eid.to_string(),
-                EhrmsEmployee {
-                    id: format!("usr-{}", eid.to_lowercase()),
-                    employee_id: eid.to_string(),
-                    name: name.to_string(),
-                    designation: desig.to_string(),
-                    department: dept.to_string(),
-                    role: role.to_string(),
-                },
-            );
-        }
-
-        let p_id = Uuid::parse_str("00000000-0000-0000-0000-000000000100").unwrap();
-        let w_id = Uuid::parse_str("b02b72e7-cef0-47b7-916e-0a460cbf0eef").unwrap();
-        let now = Utc::now();
-        let handler = sih_workflow::who_handles_stage(&ProjectStage::LandRecordVerification);
-
-        let mut projects = HashMap::new();
-        projects.insert(
-            p_id,
-            Project {
-                id: p_id,
-                name: "Delhi-Mumbai Highway Expansion".to_string(),
-                authority: Authority::NationalHighways,
-                state_code: "KA".to_string(),
-                district_code: "BLR".to_string(),
-                stage: ProjectStage::LandRecordVerification,
-                parcels: vec![Parcel {
-                    id: Uuid::parse_str("00000000-0000-0000-0000-000000000101").unwrap(),
-                    survey_number: "45/2".to_string(),
-                    owner_name: "Meera Devi".to_string(),
-                    area_hectares: 2.5,
-                    district_code: "BLR".to_string(),
-                }],
-                preliminary_notification_at: None,
-                updated_at: now,
-            },
-        );
-
-        let mut workflows = HashMap::new();
-        workflows.insert(
-            w_id,
-            WorkflowInstance {
-                id: w_id,
-                project_id: p_id,
-                authority: Authority::NationalHighways,
-                current_stage: ProjectStage::LandRecordVerification,
-                started_at: now,
-                notification_at: None,
-                deadline_at: Some(now + Duration::days(handler.timeline_days as i64)),
-                completed_at: None,
-                lapsed_at: None,
-                responsible_department: Some(handler.department_code.to_string()),
-                responsible_role: Some(handler.role_code.to_string()),
-                stage_timeline_days: Some(handler.timeline_days),
-            },
-        );
-
-        let mut project_to_workflow = HashMap::new();
-        project_to_workflow.insert(p_id, w_id);
-
+    pub fn empty() -> Self {
         Self {
-            projects,
-            workflows,
-            project_to_workflow,
+            projects: HashMap::new(),
+            workflows: HashMap::new(),
+            project_to_workflow: HashMap::new(),
             approval_history: HashMap::new(),
             audit_log: Vec::new(),
             objections: Vec::new(),
             rehabilitation: HashMap::new(),
             documents: Vec::new(),
-            ehrms_employees,
+            ehrms_employees: HashMap::new(),
         }
     }
 }
@@ -319,7 +260,7 @@ impl AppState {
 
         let project_repo = PgProjectRepository::new_optional(pool.clone(), tenant_id);
         let parcel_repo = PgParcelRepository::new_optional(pool.clone(), tenant_id);
-        let in_memory = Arc::new(RwLock::new(InMemoryStore::seeded()));
+        let in_memory = Arc::new(RwLock::new(InMemoryStore::empty()));
 
         Self {
             project_repo,
@@ -404,7 +345,243 @@ impl AppState {
                 in_mem.project_to_workflow.insert(project_id, id);
             }
         }
+
+        // Sync eHRMS users from DB
+        if let Ok(users) = sqlx::query("SELECT id, employee_id, name, designation, department, role FROM users")
+            .fetch_all(pool)
+            .await
+        {
+            use sqlx::Row;
+            let mut in_mem = self.in_memory.write().unwrap();
+            for u in users {
+                let id: Uuid = u.get("id");
+                let eid: String = u.get("employee_id");
+                in_mem.ehrms_employees.insert(
+                    eid.clone(),
+                    EhrmsEmployee {
+                        id: id.to_string(),
+                        employee_id: eid,
+                        name: u.get("name"),
+                        designation: u.get("designation"),
+                        department: u.get("department"),
+                        role: u.get("role"),
+                    },
+                );
+            }
+        }
+
+        // Ensure genesis blocks in audit_log if empty
+        use sqlx::Row;
+        let audit_count: i64 = sqlx::query("SELECT count(*) FROM audit_log")
+            .fetch_one(pool)
+            .await
+            .map(|r| r.get(0))
+            .unwrap_or(0);
+
+        if audit_count == 0 {
+            let admin_id = Uuid::parse_str("00000000-0000-0000-0000-000000000010").unwrap();
+            let p_id = Uuid::parse_str("00000000-0000-0000-0000-000000000100").unwrap();
+            let _ = append_audit_log_pg(
+                pool,
+                Some(DEFAULT_TENANT_ID),
+                Some(admin_id),
+                Some("admin"),
+                "GENESIS_INIT",
+                "system",
+                Some(DEFAULT_TENANT_ID),
+                json!({"message": "LandFlow National Orchestration Layer Genesis Block"}),
+                Some("System initialization under RFCTLARR Act 2013"),
+            ).await;
+
+            let _ = append_audit_log_pg(
+                pool,
+                Some(DEFAULT_TENANT_ID),
+                Some(admin_id),
+                Some("admin"),
+                "CREATE_PROJECT",
+                "project",
+                Some(p_id),
+                json!({"authority": "national_highways", "name": "Delhi-Mumbai Highway Expansion"}),
+                Some("National corridor project registered"),
+            ).await;
+        }
+
+        // Sync audit log from DB into memory cache
+        if let Ok(entries) = sqlx::query(
+            "SELECT id, occurred_at, actor_user_id, action, entity_type, entity_id, new_value, previous_hash, row_hash
+             FROM audit_log
+             ORDER BY id ASC"
+        )
+        .fetch_all(pool)
+        .await
+        {
+            let mut in_mem = self.in_memory.write().unwrap();
+            in_mem.audit_log.clear();
+            for r in entries {
+                let id: i64 = r.get("id");
+                let occurred_at: DateTime<Utc> = r.get("occurred_at");
+                let actor_user_id: Option<Uuid> = r.get("actor_user_id");
+                let action: String = r.get("action");
+                let entity_type: String = r.get("entity_type");
+                let entity_id: Option<Uuid> = r.get("entity_id");
+                let new_value: Option<serde_json::Value> = r.get("new_value");
+                let previous_hash: String = r.get("previous_hash");
+                let row_hash: String = r.get("row_hash");
+
+                let resource = match entity_id {
+                    Some(eid) => format!("{}/{}", entity_type, eid),
+                    None => entity_type,
+                };
+
+                in_mem.audit_log.push(AuditEntry {
+                    sequence: id as u64,
+                    timestamp: occurred_at,
+                    actor_id: actor_user_id.unwrap_or_default(),
+                    action,
+                    resource,
+                    payload: new_value.unwrap_or_else(|| serde_json::json!({})),
+                    previous_hash,
+                    hash: row_hash,
+                });
+            }
+        }
+
+        // Sync documents from DB
+        if let Ok(doc_rows) = sqlx::query(
+            "SELECT id, project_id, kind, file_name, content_hash, version, coalesce(signed_by, '') as signed_by, created_at
+             FROM document
+             ORDER BY created_at ASC"
+        )
+        .fetch_all(pool)
+        .await
+        {
+            let mut in_mem = self.in_memory.write().unwrap();
+            in_mem.documents.clear();
+            for r in doc_rows {
+                in_mem.documents.push(DocumentRecord {
+                    id: r.get("id"),
+                    project_id: r.get("project_id"),
+                    kind: r.get("kind"),
+                    file_name: r.get("file_name"),
+                    content_hash: r.get("content_hash"),
+                    version: r.get::<i32, _>("version") as u32,
+                    signed_by: r.get("signed_by"),
+                    uploaded_at: r.get("created_at"),
+                });
+            }
+        }
+
+        // Sync objections from DB
+        if let Ok(obj_rows) = sqlx::query(
+            "SELECT id, project_id, coalesce(survey_number, '') as survey_number,
+                    coalesce(owner_name, '') as owner_name, coalesce(objection_type, 'general') as objection_type,
+                    coalesce(description, text) as text, status, filed_at, resolution
+             FROM objection
+             ORDER BY filed_at ASC"
+        )
+        .fetch_all(pool)
+        .await
+        {
+            let mut in_mem = self.in_memory.write().unwrap();
+            in_mem.objections.clear();
+            for r in obj_rows {
+                let pid: Option<Uuid> = r.get("project_id");
+                if let Some(project_id) = pid {
+                    in_mem.objections.push(ObjectionRecord {
+                        id: r.get("id"),
+                        project_id,
+                        survey_number: r.get("survey_number"),
+                        owner_name: r.get("owner_name"),
+                        objection_type: r.get("objection_type"),
+                        text: r.get("text"),
+                        status: r.get("status"),
+                        filed_at: r.get("filed_at"),
+                        resolution: r.get("resolution"),
+                    });
+                }
+            }
+        }
     }
+}
+
+pub async fn append_audit_log_pg(
+    pool: &DbPool,
+    tenant_id: Option<Uuid>,
+    actor_id: Option<Uuid>,
+    actor_role: Option<&str>,
+    action: &str,
+    entity_type: &str,
+    entity_id: Option<Uuid>,
+    payload: serde_json::Value,
+    reason: Option<&str>,
+) -> Result<AuditEntry, ApiError> {
+    use sqlx::Row;
+    let last_row = sqlx::query("SELECT id, row_hash FROM audit_log ORDER BY id DESC LIMIT 1")
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| ApiError::BadRequest(format!("Failed to read audit_log: {e}")))?;
+
+    let (prev_hash, seq) = match last_row {
+        Some(r) => {
+            let h: String = r.get("row_hash");
+            let id: i64 = r.get("id");
+            (h, (id as u64) + 1)
+        }
+        None => (String::new(), 1u64),
+    };
+
+    let now_micros = Utc::now().timestamp_micros();
+    let timestamp = chrono::DateTime::from_timestamp_micros(now_micros).unwrap_or_else(Utc::now);
+
+    let resource = match entity_id {
+        Some(eid) => format!("{}/{}", entity_type, eid),
+        None => entity_type.to_string(),
+    };
+
+    let canonical = format!(
+        "{}|{}|{}|{}|{}|{}|{}",
+        seq,
+        timestamp.to_rfc3339(),
+        actor_id.unwrap_or_default(),
+        action,
+        resource,
+        payload,
+        prev_hash
+    );
+    let row_hash = format!("{:x}", sha2::Sha256::digest(canonical.as_bytes()));
+
+    let inserted_id = sqlx::query(
+        "INSERT INTO audit_log (
+            occurred_at, tenant_id, actor_user_id, actor_role, action, entity_type, entity_id, new_value, reason, previous_hash, row_hash
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        RETURNING id"
+    )
+    .bind(timestamp)
+    .bind(tenant_id)
+    .bind(actor_id)
+    .bind(actor_role)
+    .bind(action)
+    .bind(entity_type)
+    .bind(entity_id)
+    .bind(&payload)
+    .bind(reason)
+    .bind(&prev_hash)
+    .bind(&row_hash)
+    .fetch_one(pool)
+    .await
+    .map_err(|e| ApiError::BadRequest(format!("Failed to insert audit_log: {e}")))?
+    .get::<i64, _>("id");
+
+    Ok(AuditEntry {
+        sequence: inserted_id as u64,
+        timestamp,
+        actor_id: actor_id.unwrap_or_default(),
+        action: action.to_string(),
+        resource,
+        payload,
+        previous_hash: prev_hash,
+        hash: row_hash,
+    })
 }
 
 #[derive(Clone)]
@@ -609,6 +786,8 @@ pub fn app(state: AppState) -> Router {
         .route("/documents/project/:id", get(list_project_documents))
         .route("/mock-ehrms/login", post(mock_ehrms_login))
         .route("/mock-ehrms/employees", get(list_mock_ehrms_employees))
+        .route("/dashboard/kpis", get(get_dashboard_kpis))
+        .route("/alerts", get(get_alerts))
         .layer(cors)
         .with_state(state)
 }
@@ -1564,7 +1743,7 @@ async fn approve_workflow_endpoint(
             updated_instance,
         )
     };
-
+    let (mut seq, mut audit_hash) = (seq, audit_hash);
     if let Some(ref pool) = state.pool {
         let stage_code = sih_workflow::stage_to_db_code(next_stage);
         let _ = sqlx::query(
@@ -1587,6 +1766,46 @@ async fn approve_workflow_endpoint(
         .bind(project_id)
         .execute(pool)
         .await;
+
+        let from_code = sih_workflow::stage_to_db_code(current_stage);
+        let _ = sqlx::query(
+            "INSERT INTO approval_history (workflow_instance_id, from_stage, to_stage, actor_role, decision, reason, created_at)
+             VALUES ($1, $2, $3, $4, 'approved', $5, $6)"
+        )
+        .bind(workflow_id)
+        .bind(from_code)
+        .bind(stage_code)
+        .bind(&actor_role)
+        .bind(&request.remarks)
+        .bind(now)
+        .execute(pool)
+        .await;
+
+        if let Ok(entry) = append_audit_log_pg(
+            pool,
+            Some(DEFAULT_TENANT_ID),
+            Some(project_id),
+            Some(&actor_role),
+            "STAGE_GATE_APPROVAL",
+            "workflow",
+            Some(workflow_id),
+            json!({
+                "from_stage": sih_workflow::canonical_stage_label(&current_stage),
+                "to_stage": sih_workflow::canonical_stage_label(&next_stage),
+                "actor": actor_name,
+                "role": actor_role,
+                "decision": "APPROVE",
+                "remarks": request.remarks,
+                "verified_documents": request.documents,
+                "next_responsible_dept": next_handler.department_code,
+                "next_responsible_role": next_handler.role_code,
+                "sla_deadline": stage_deadline,
+            }),
+            Some("Stage gate approval executed"),
+        ).await {
+            seq = entry.sequence;
+            audit_hash = entry.hash;
+        }
     }
 
     Ok(Json(StageGateDecisionResponse {
@@ -1736,6 +1955,7 @@ async fn reject_workflow_endpoint(
         )
     };
 
+    let (mut seq, mut audit_hash) = (seq, audit_hash);
     if let Some(ref pool) = state.pool {
         let stage_code = sih_workflow::stage_to_db_code(prev_stage);
         let _ = sqlx::query(
@@ -1756,6 +1976,45 @@ async fn reject_workflow_endpoint(
         .bind(project_id)
         .execute(pool)
         .await;
+
+        let from_code = sih_workflow::stage_to_db_code(current_stage);
+        let _ = sqlx::query(
+            "INSERT INTO approval_history (workflow_instance_id, from_stage, to_stage, actor_role, decision, reason, created_at)
+             VALUES ($1, $2, $3, $4, 'rejected', $5, $6)"
+        )
+        .bind(workflow_id)
+        .bind(from_code)
+        .bind(stage_code)
+        .bind(&actor_role)
+        .bind(&remarks)
+        .bind(now)
+        .execute(pool)
+        .await;
+
+        if let Ok(entry) = append_audit_log_pg(
+            pool,
+            Some(DEFAULT_TENANT_ID),
+            Some(project_id),
+            Some(&actor_role),
+            "STAGE_GATE_REJECTION",
+            "workflow",
+            Some(workflow_id),
+            json!({
+                "from_stage": sih_workflow::canonical_stage_label(&current_stage),
+                "returned_to": sih_workflow::canonical_stage_label(&prev_stage),
+                "actor": actor_name,
+                "role": actor_role,
+                "decision": "REJECT",
+                "remarks": remarks,
+                "responsible_dept": prev_handler.department_code,
+                "responsible_role": prev_handler.role_code,
+                "sla_deadline": stage_deadline,
+            }),
+            Some("Stage gate rejection / return for revision"),
+        ).await {
+            seq = entry.sequence;
+            audit_hash = entry.hash;
+        }
     }
 
     Ok(Json(StageGateDecisionResponse {
@@ -1788,6 +2047,130 @@ async fn get_workflow_status(
     State(state): State<AppState>,
     Path(id_str): Path<String>,
 ) -> Result<Json<WorkflowStatusResponse>, ApiError> {
+    if let Some(ref pool) = state.pool {
+        let parsed_uuid = Uuid::parse_str(&id_str).ok();
+        use sqlx::Row;
+        let row = if let Some(uid) = parsed_uuid {
+            sqlx::query(
+                "SELECT id, project_id, authority::text as authority, current_stage, started_at, 
+                        notification_at, deadline_at, completed_at, lapsed_at
+                 FROM workflow_instance
+                 WHERE id = $1 OR project_id = $1"
+            )
+            .bind(uid)
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| ApiError::BadRequest(format!("Failed to query workflow_instance: {e}")))?
+        } else {
+            None
+        };
+
+        let row = match row {
+            Some(r) => r,
+            None => sqlx::query(
+                "SELECT id, project_id, authority::text as authority, current_stage, started_at, 
+                        notification_at, deadline_at, completed_at, lapsed_at
+                 FROM workflow_instance
+                 LIMIT 1"
+            )
+            .fetch_one(pool)
+            .await
+            .map_err(|_| ApiError::NotFound(format!("Workflow not found for ID '{id_str}'")))?,
+        };
+
+        let workflow_id: Uuid = row.get("id");
+        let project_id: Uuid = row.get("project_id");
+        let stage_str: String = row.get("current_stage");
+        let deadline_at: Option<DateTime<Utc>> = row.get("deadline_at");
+
+        let current_stage = sih_workflow::db_code_to_stage(&stage_str);
+        let handler = sih_workflow::who_handles_stage(&current_stage);
+
+        let doc_rows = sqlx::query("SELECT file_name FROM document WHERE project_id = $1")
+            .bind(project_id)
+            .fetch_all(pool)
+            .await
+            .unwrap_or_default();
+
+        let uploaded_names: Vec<String> = doc_rows.iter().map(|r| r.get("file_name")).collect();
+
+        let fake_docs: Vec<DocumentRecord> = uploaded_names
+            .iter()
+            .map(|name| DocumentRecord {
+                id: Uuid::nil(),
+                project_id,
+                kind: String::new(),
+                file_name: name.clone(),
+                content_hash: String::new(),
+                version: 1,
+                signed_by: String::new(),
+                uploaded_at: Utc::now(),
+            })
+            .collect();
+
+        let missing = check_mandatory_documents(
+            handler.required_documents,
+            &[],
+            &fake_docs,
+        );
+        let missing_names: Vec<String> = missing.iter().map(|s| s.to_string()).collect();
+
+        let hist_rows = sqlx::query(
+            "SELECT from_stage, to_stage, actor_role, decision, reason, created_at
+             FROM approval_history
+             WHERE workflow_instance_id = $1
+             ORDER BY created_at ASC"
+        )
+        .bind(workflow_id)
+        .fetch_all(pool)
+        .await
+        .unwrap_or_default();
+
+        let mut recent_actions = Vec::new();
+        for hr in hist_rows {
+            let from_s: String = hr.get("from_stage");
+            let to_s: String = hr.get("to_stage");
+            let _role_s: String = hr.get("actor_role");
+            let dec_s: String = hr.get("decision");
+            let reason: Option<String> = hr.get("reason");
+            let created_at: DateTime<Utc> = hr.get("created_at");
+
+            recent_actions.push(ApprovalAction {
+                id: Uuid::nil(),
+                workflow_instance_id: workflow_id,
+                from_stage: sih_workflow::db_code_to_stage(&from_s),
+                to_stage: sih_workflow::db_code_to_stage(&to_s),
+                actor_user_id: None,
+                actor_role: sih_domain::Role::Admin,
+                decision: dec_s,
+                reason,
+                created_at,
+            });
+        }
+
+        let is_terminal = current_stage == ProjectStage::ProjectClosure
+            || current_stage == ProjectStage::Completed
+            || current_stage == ProjectStage::Lapsed;
+
+        return Ok(Json(WorkflowStatusResponse {
+            workflow_id,
+            project_id,
+            current_stage,
+            current_stage_name: sih_workflow::canonical_stage_label(&current_stage).to_string(),
+            responsible_department: handler.department_code.to_string(),
+            responsible_role: handler.role_code.to_string(),
+            approval_authority: handler.approval_authority.to_string(),
+            timeline_days: handler.timeline_days,
+            deadline_at,
+            is_terminal,
+            required_documents: handler.required_documents.iter().map(|s| s.to_string()).collect(),
+            uploaded_documents: uploaded_names,
+            missing_documents: missing_names,
+            can_advance: missing.is_empty() && !is_terminal,
+            recent_actions,
+        }));
+    }
+
     let in_mem = state.in_memory.read().unwrap();
     let workflow_id = resolve_workflow_instance(&in_mem, &id_str)?;
 
@@ -1849,6 +2232,43 @@ async fn workflow_history(
     let Path(workflow_id) =
         id.map_err(|_| ApiError::BadRequest("workflow id must be a UUID".to_string()))?;
     require_permission(&actor, Permission::ViewProjects)?;
+
+    if let Some(ref pool) = state.pool {
+        use sqlx::Row;
+        let rows = sqlx::query(
+            "SELECT from_stage, to_stage, actor_role, decision, reason, created_at
+             FROM approval_history
+             WHERE workflow_instance_id = $1
+             ORDER BY created_at ASC"
+        )
+        .bind(workflow_id)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| ApiError::BadRequest(format!("Failed to query approval_history: {e}")))?;
+
+        let mut history = Vec::new();
+        for hr in rows {
+            let from_s: String = hr.get("from_stage");
+            let to_s: String = hr.get("to_stage");
+            let _role_s: String = hr.get("actor_role");
+            let dec_s: String = hr.get("decision");
+            let reason: Option<String> = hr.get("reason");
+            let created_at: DateTime<Utc> = hr.get("created_at");
+
+            history.push(ApprovalAction {
+                id: Uuid::nil(),
+                workflow_instance_id: workflow_id,
+                from_stage: sih_workflow::db_code_to_stage(&from_s),
+                to_stage: sih_workflow::db_code_to_stage(&to_s),
+                actor_user_id: None,
+                actor_role: sih_domain::Role::Admin,
+                decision: dec_s,
+                reason,
+                created_at,
+            });
+        }
+        return Ok(Json(history));
+    }
 
     let in_mem = state.in_memory.read().unwrap();
     let history = in_mem
@@ -2149,24 +2569,62 @@ async fn auth_login(
     })))
 }
 
-async fn get_audit_trail(State(state): State<AppState>) -> Json<Vec<AuditEntry>> {
+async fn get_audit_trail(State(state): State<AppState>) -> Result<Json<Vec<AuditEntry>>, ApiError> {
+    if let Some(ref pool) = state.pool {
+        use sqlx::Row;
+        let rows = sqlx::query(
+            "SELECT id, occurred_at, actor_user_id, action, entity_type, entity_id, new_value, previous_hash, row_hash
+             FROM audit_log
+             ORDER BY id ASC"
+        )
+        .fetch_all(pool)
+        .await
+        .map_err(|e| ApiError::BadRequest(format!("Failed to fetch audit log: {e}")))?;
+
+        let mut entries = Vec::new();
+        for r in rows {
+            let id: i64 = r.get("id");
+            let occurred_at: DateTime<Utc> = r.get("occurred_at");
+            let actor_user_id: Option<Uuid> = r.get("actor_user_id");
+            let action: String = r.get("action");
+            let entity_type: String = r.get("entity_type");
+            let entity_id: Option<Uuid> = r.get("entity_id");
+            let new_value: Option<serde_json::Value> = r.get("new_value");
+            let previous_hash: String = r.get("previous_hash");
+            let row_hash: String = r.get("row_hash");
+
+            let resource = match entity_id {
+                Some(eid) => format!("{}/{}", entity_type, eid),
+                None => entity_type,
+            };
+
+            entries.push(AuditEntry {
+                sequence: id as u64,
+                timestamp: occurred_at,
+                actor_id: actor_user_id.unwrap_or_default(),
+                action,
+                resource,
+                payload: new_value.unwrap_or_else(|| serde_json::json!({})),
+                previous_hash,
+                hash: row_hash,
+            });
+        }
+        return Ok(Json(entries));
+    }
+
     let in_mem = state.in_memory.read().unwrap();
-    Json(in_mem.audit_log.clone())
+    Ok(Json(in_mem.audit_log.clone()))
 }
 
-async fn verify_audit(State(state): State<AppState>) -> Json<Value> {
-    let in_mem = state.in_memory.read().unwrap();
-    let verified = verify_audit_chain(&in_mem.audit_log);
-    let head_hash = in_mem
-        .audit_log
-        .last()
-        .map(|e| e.hash.clone())
-        .unwrap_or_default();
-    Json(json!({
+async fn verify_audit(State(state): State<AppState>) -> Result<Json<Value>, ApiError> {
+    let Json(entries) = get_audit_trail(State(state)).await?;
+    let verified = verify_audit_chain(&entries);
+    let head_hash = entries.last().map(|e| e.hash.clone()).unwrap_or_default();
+    Ok(Json(json!({
         "verified": verified,
-        "entries_count": in_mem.audit_log.len(),
+        "entries_count": entries.len(),
         "chain_head": head_hash
-    }))
+    })))
 }
 
 async fn list_workflow_regimes() -> Json<Vec<WorkflowRegimeDefinition>> {
@@ -2408,34 +2866,60 @@ async fn submit_objection(
     State(state): State<AppState>,
     JsonBody(payload): JsonBody<SubmitObjectionPayload>,
 ) -> Result<Json<ObjectionRecord>, ApiError> {
-    let mut in_mem = state.in_memory.write().unwrap();
+    let obj_id = Uuid::new_v4();
+    let now = Utc::now();
+    let status = "filed".to_string();
+
+    if let Some(ref pool) = state.pool {
+        sqlx::query(
+            "INSERT INTO objection (id, project_id, survey_number, owner_name, objection_type, description, text, status, filed_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)"
+        )
+        .bind(obj_id)
+        .bind(payload.project_id)
+        .bind(&payload.survey_number)
+        .bind(&payload.owner_name)
+        .bind(&payload.objection_type)
+        .bind(&payload.text)
+        .bind(&payload.text)
+        .bind(&status)
+        .bind(now)
+        .execute(pool)
+        .await
+        .map_err(|e| ApiError::BadRequest(format!("Failed to insert objection: {e}")))?;
+
+        let _ = append_audit_log_pg(
+            pool,
+            Some(DEFAULT_TENANT_ID),
+            Some(payload.project_id),
+            Some("land_owner"),
+            "OBJECTION_FILED",
+            "parcel",
+            None,
+            json!({
+                "owner": payload.owner_name,
+                "type": payload.objection_type,
+                "survey": payload.survey_number,
+                "objection_id": obj_id.to_string(),
+            }),
+            Some("Objection filed by citizen under Section 15"),
+        )
+        .await;
+    }
+
     let record = ObjectionRecord {
-        id: Uuid::new_v4(),
+        id: obj_id,
         project_id: payload.project_id,
-        survey_number: payload.survey_number.clone(),
-        owner_name: payload.owner_name.clone(),
-        objection_type: payload.objection_type.clone(),
-        text: payload.text.clone(),
-        status: "filed".to_string(),
-        filed_at: Utc::now(),
+        survey_number: payload.survey_number,
+        owner_name: payload.owner_name,
+        objection_type: payload.objection_type,
+        text: payload.text,
+        status,
+        filed_at: now,
         resolution: None,
     };
 
-    let prev_hash = in_mem.audit_log.last().map(|e| e.hash.clone()).unwrap_or_default();
-    let next_seq = (in_mem.audit_log.len() + 1) as u64;
-    let audit_entry = AuditEntry::new(
-        next_seq,
-        payload.project_id,
-        "OBJECTION_FILED",
-        &format!("parcel/{}", payload.survey_number),
-        json!({
-            "owner": payload.owner_name,
-            "type": payload.objection_type,
-            "survey": payload.survey_number
-        }),
-        prev_hash,
-    );
-    in_mem.audit_log.push(audit_entry);
+    let mut in_mem = state.in_memory.write().unwrap();
     in_mem.objections.push(record.clone());
 
     Ok(Json(record))
@@ -2444,7 +2928,40 @@ async fn submit_objection(
 async fn list_project_objections(
     State(state): State<AppState>,
     Path(project_id): Path<ProjectId>,
-) -> Json<Vec<ObjectionRecord>> {
+) -> Result<Json<Vec<ObjectionRecord>>, ApiError> {
+    if let Some(ref pool) = state.pool {
+        use sqlx::Row;
+        let rows = sqlx::query(
+            "SELECT id, project_id, coalesce(survey_number, '') as survey_number,
+                    coalesce(owner_name, '') as owner_name, coalesce(objection_type, 'general') as objection_type,
+                    coalesce(description, text) as text, status, filed_at, resolution
+             FROM objection
+             WHERE project_id = $1
+             ORDER BY filed_at DESC"
+        )
+        .bind(project_id)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| ApiError::BadRequest(format!("Failed to list objections: {e}")))?;
+
+        let records: Vec<ObjectionRecord> = rows
+            .into_iter()
+            .map(|r| ObjectionRecord {
+                id: r.get("id"),
+                project_id: r.get("project_id"),
+                survey_number: r.get("survey_number"),
+                owner_name: r.get("owner_name"),
+                objection_type: r.get("objection_type"),
+                text: r.get("text"),
+                status: r.get("status"),
+                filed_at: r.get("filed_at"),
+                resolution: r.get("resolution"),
+            })
+            .collect();
+
+        return Ok(Json(records));
+    }
+
     let in_mem = state.in_memory.read().unwrap();
     let matches: Vec<ObjectionRecord> = in_mem
         .objections
@@ -2452,7 +2969,7 @@ async fn list_project_objections(
         .filter(|o| o.project_id == project_id)
         .cloned()
         .collect();
-    Json(matches)
+    Ok(Json(matches))
 }
 
 async fn resolve_objection(
@@ -2460,6 +2977,60 @@ async fn resolve_objection(
     Path(objection_id): Path<Uuid>,
     JsonBody(payload): JsonBody<ResolveObjectionPayload>,
 ) -> Result<Json<ObjectionRecord>, ApiError> {
+    if let Some(ref pool) = state.pool {
+        use sqlx::Row;
+        let row = sqlx::query(
+            "UPDATE objection
+             SET status = $1, resolution = $2
+             WHERE id = $3
+             RETURNING id, project_id, coalesce(survey_number, '') as survey_number,
+                       coalesce(owner_name, '') as owner_name, coalesce(objection_type, 'general') as objection_type,
+                       coalesce(description, text) as text, status, filed_at, resolution"
+        )
+        .bind(&payload.status)
+        .bind(&payload.resolution)
+        .bind(objection_id)
+        .fetch_one(pool)
+        .await
+        .map_err(|_| ApiError::NotFound("Objection not found".to_string()))?;
+
+        let record = ObjectionRecord {
+            id: row.get("id"),
+            project_id: row.get("project_id"),
+            survey_number: row.get("survey_number"),
+            owner_name: row.get("owner_name"),
+            objection_type: row.get("objection_type"),
+            text: row.get("text"),
+            status: row.get("status"),
+            filed_at: row.get("filed_at"),
+            resolution: row.get("resolution"),
+        };
+
+        let _ = append_audit_log_pg(
+            pool,
+            Some(DEFAULT_TENANT_ID),
+            Some(record.project_id),
+            Some("collector"),
+            "OBJECTION_RESOLVED",
+            "objection",
+            Some(record.id),
+            json!({
+                "status": record.status,
+                "resolution": record.resolution
+            }),
+            Some("Objection heard and disposed under Section 15(2)"),
+        )
+        .await;
+
+        let mut in_mem = state.in_memory.write().unwrap();
+        if let Some(o) = in_mem.objections.iter_mut().find(|o| o.id == objection_id) {
+            o.status = record.status.clone();
+            o.resolution = record.resolution.clone();
+        }
+
+        return Ok(Json(record));
+    }
+
     let mut in_mem = state.in_memory.write().unwrap();
     let objection = in_mem
         .objections
@@ -2471,33 +3042,66 @@ async fn resolve_objection(
     objection.resolution = Some(payload.resolution);
     let record = objection.clone();
 
-    let prev_hash = in_mem.audit_log.last().map(|e| e.hash.clone()).unwrap_or_default();
-    let next_seq = (in_mem.audit_log.len() + 1) as u64;
-    let audit_entry = AuditEntry::new(
-        next_seq,
-        record.project_id,
-        "OBJECTION_RESOLVED",
-        &format!("objection/{}", record.id),
-        json!({
-            "status": record.status,
-            "resolution": record.resolution
-        }),
-        prev_hash,
-    );
-    in_mem.audit_log.push(audit_entry);
-
     Ok(Json(record))
 }
 
 async fn get_rehabilitation(
     State(state): State<AppState>,
     Path(project_id): Path<ProjectId>,
-) -> Json<RehabilitationSummary> {
+) -> Result<Json<RehabilitationSummary>, ApiError> {
+    if let Some(ref pool) = state.pool {
+        use sqlx::Row;
+        let fam_row = sqlx::query(
+            "SELECT count(*)::bigint as total, count(*) FILTER (WHERE displaced)::bigint as displaced
+             FROM affected_family
+             WHERE project_id = $1"
+        )
+        .bind(project_id)
+        .fetch_one(pool)
+        .await
+        .map_err(|e| ApiError::BadRequest(format!("Failed to query affected_family: {e}")))?;
+
+        let total_families: i64 = fam_row.get("total");
+        let displaced_families: i64 = fam_row.get("displaced");
+
+        let ent_row = sqlx::query(
+            "SELECT count(*)::bigint as total_ent, count(*) FILTER (WHERE delivery_status = 'delivered')::bigint as delivered_ent
+             FROM rr_entitlement e
+             JOIN affected_family f ON e.affected_family_id = f.id
+             WHERE f.project_id = $1"
+        )
+        .bind(project_id)
+        .fetch_one(pool)
+        .await
+        .map_err(|e| ApiError::BadRequest(format!("Failed to query rr_entitlement: {e}")))?;
+
+        let total_ent: i64 = ent_row.get("total_ent");
+        let delivered_ent: i64 = ent_row.get("delivered_ent");
+
+        let status = if total_ent > 0 && delivered_ent >= total_ent {
+            "completed"
+        } else if delivered_ent > 0 {
+            "in_progress"
+        } else {
+            "pending"
+        };
+
+        return Ok(Json(RehabilitationSummary {
+            project_id,
+            affected_families_count: total_families as usize,
+            displaced_families_count: displaced_families as usize,
+            entitlements_total: total_ent as usize,
+            entitlements_delivered: delivered_ent as usize,
+            status: status.to_string(),
+            last_updated_at: Utc::now(),
+        }));
+    }
+
     let in_mem = state.in_memory.read().unwrap();
     if let Some(r) = in_mem.rehabilitation.get(&project_id) {
-        Json(r.clone())
+        Ok(Json(r.clone()))
     } else {
-        Json(RehabilitationSummary {
+        Ok(Json(RehabilitationSummary {
             project_id,
             affected_families_count: 15,
             displaced_families_count: 4,
@@ -2505,7 +3109,7 @@ async fn get_rehabilitation(
             entitlements_delivered: 22,
             status: "in_progress".to_string(),
             last_updated_at: Utc::now(),
-        })
+        }))
     }
 }
 
@@ -2514,6 +3118,43 @@ async fn update_rehabilitation(
     Path(project_id): Path<ProjectId>,
     JsonBody(payload): JsonBody<UpdateRehabilitationPayload>,
 ) -> Result<Json<RehabilitationSummary>, ApiError> {
+    if let Some(ref pool) = state.pool {
+        if payload.entitlements_delivered > 0 {
+            let _ = sqlx::query(
+                "UPDATE rr_entitlement
+                 SET delivery_status = 'delivered'
+                 WHERE id IN (
+                     SELECT e.id FROM rr_entitlement e
+                     JOIN affected_family f ON e.affected_family_id = f.id
+                     WHERE f.project_id = $1 AND e.delivery_status != 'delivered'
+                     LIMIT $2
+                 )"
+            )
+            .bind(project_id)
+            .bind(payload.entitlements_delivered as i64)
+            .execute(pool)
+            .await;
+        }
+
+        let _ = append_audit_log_pg(
+            pool,
+            Some(DEFAULT_TENANT_ID),
+            Some(project_id),
+            Some("rr_officer"),
+            "REHABILITATION_UPDATED",
+            "rehabilitation",
+            Some(project_id),
+            json!({
+                "entitlements_delivered": payload.entitlements_delivered,
+                "status": payload.status
+            }),
+            Some("R&R Schedule II entitlements updated"),
+        )
+        .await;
+
+        return get_rehabilitation(State(state), Path(project_id)).await;
+    }
+
     let mut in_mem = state.in_memory.write().unwrap();
     let summary = in_mem.rehabilitation.entry(project_id).or_insert(RehabilitationSummary {
         project_id,
@@ -2530,21 +3171,6 @@ async fn update_rehabilitation(
     summary.last_updated_at = Utc::now();
     let record = summary.clone();
 
-    let prev_hash = in_mem.audit_log.last().map(|e| e.hash.clone()).unwrap_or_default();
-    let next_seq = (in_mem.audit_log.len() + 1) as u64;
-    let audit_entry = AuditEntry::new(
-        next_seq,
-        project_id,
-        "REHABILITATION_UPDATED",
-        &format!("rehabilitation/{}", project_id),
-        json!({
-            "entitlements_delivered": record.entitlements_delivered,
-            "status": record.status
-        }),
-        prev_hash,
-    );
-    in_mem.audit_log.push(audit_entry);
-
     Ok(Json(record))
 }
 
@@ -2552,39 +3178,64 @@ async fn upload_document(
     State(state): State<AppState>,
     JsonBody(payload): JsonBody<UploadDocumentPayload>,
 ) -> Result<Json<DocumentRecord>, ApiError> {
-    let mut in_mem = state.in_memory.write().unwrap();
+    let doc_id = Uuid::new_v4();
     let mut hasher = Sha256::new();
     hasher.update(payload.file_name.as_bytes());
     hasher.update(payload.kind.as_bytes());
-    hasher.update(Utc::now().to_rfc3339().as_bytes());
+    let now = Utc::now();
+    hasher.update(now.to_rfc3339().as_bytes());
     let content_hash = format!("{:x}", hasher.finalize());
 
+    if let Some(ref pool) = state.pool {
+        let object_key = format!("docs/{}/{}", payload.project_id, payload.file_name);
+
+        sqlx::query(
+            "INSERT INTO document (id, tenant_id, project_id, kind, file_name, content_hash, object_key, version, signed_by, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, 1, $8, $9)"
+        )
+        .bind(doc_id)
+        .bind(DEFAULT_TENANT_ID)
+        .bind(payload.project_id)
+        .bind(&payload.kind)
+        .bind(&payload.file_name)
+        .bind(&content_hash)
+        .bind(&object_key)
+        .bind(&payload.signed_by)
+        .bind(now)
+        .execute(pool)
+        .await
+        .map_err(|e| ApiError::BadRequest(format!("Failed to save document to PostgreSQL: {e}")))?;
+
+        let _ = append_audit_log_pg(
+            pool,
+            Some(DEFAULT_TENANT_ID),
+            Some(payload.project_id),
+            Some("collector"),
+            "DOCUMENT_UPLOADED",
+            "document",
+            Some(doc_id),
+            json!({
+                "kind": payload.kind,
+                "file_name": payload.file_name,
+                "hash": content_hash
+            }),
+            Some("Statutory document digitally signed and archived"),
+        )
+        .await;
+    }
+
     let record = DocumentRecord {
-        id: Uuid::new_v4(),
+        id: doc_id,
         project_id: payload.project_id,
-        kind: payload.kind.clone(),
-        file_name: payload.file_name.clone(),
+        kind: payload.kind,
+        file_name: payload.file_name,
         content_hash,
         version: 1,
-        signed_by: payload.signed_by.clone(),
-        uploaded_at: Utc::now(),
+        signed_by: payload.signed_by,
+        uploaded_at: now,
     };
 
-    let prev_hash = in_mem.audit_log.last().map(|e| e.hash.clone()).unwrap_or_default();
-    let next_seq = (in_mem.audit_log.len() + 1) as u64;
-    let audit_entry = AuditEntry::new(
-        next_seq,
-        payload.project_id,
-        "DOCUMENT_UPLOADED",
-        &format!("document/{}", record.id),
-        json!({
-            "kind": record.kind,
-            "file_name": record.file_name,
-            "hash": record.content_hash
-        }),
-        prev_hash,
-    );
-    in_mem.audit_log.push(audit_entry);
+    let mut in_mem = state.in_memory.write().unwrap();
     in_mem.documents.push(record.clone());
 
     Ok(Json(record))
@@ -2593,7 +3244,37 @@ async fn upload_document(
 async fn list_project_documents(
     State(state): State<AppState>,
     Path(project_id): Path<ProjectId>,
-) -> Json<Vec<DocumentRecord>> {
+) -> Result<Json<Vec<DocumentRecord>>, ApiError> {
+    if let Some(ref pool) = state.pool {
+        use sqlx::Row;
+        let rows = sqlx::query(
+            "SELECT id, project_id, kind, file_name, content_hash, version, coalesce(signed_by, '') as signed_by, created_at
+             FROM document
+             WHERE project_id = $1
+             ORDER BY created_at DESC"
+        )
+        .bind(project_id)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| ApiError::BadRequest(format!("Failed to list documents: {e}")))?;
+
+        let records: Vec<DocumentRecord> = rows
+            .into_iter()
+            .map(|r| DocumentRecord {
+                id: r.get("id"),
+                project_id: r.get("project_id"),
+                kind: r.get("kind"),
+                file_name: r.get("file_name"),
+                content_hash: r.get("content_hash"),
+                version: r.get::<i32, _>("version") as u32,
+                signed_by: r.get("signed_by"),
+                uploaded_at: r.get("created_at"),
+            })
+            .collect();
+
+        return Ok(Json(records));
+    }
+
     let in_mem = state.in_memory.read().unwrap();
     let matches: Vec<DocumentRecord> = in_mem
         .documents
@@ -2601,7 +3282,7 @@ async fn list_project_documents(
         .filter(|d| d.project_id == project_id)
         .cloned()
         .collect();
-    Json(matches)
+    Ok(Json(matches))
 }
 
 async fn mock_ehrms_login(
@@ -2611,12 +3292,14 @@ async fn mock_ehrms_login(
     let emp_id = payload.employee_id.trim().to_uppercase();
 
     if let Some(ref pool) = state.pool {
-        if let Ok(row) = sqlx::query("SELECT id, employee_id, name, designation, department, role FROM users WHERE employee_id = $1")
+        use sqlx::Row;
+        let row = sqlx::query("SELECT id, employee_id, name, designation, department, role FROM users WHERE employee_id = $1")
             .bind(&emp_id)
-            .fetch_one(pool)
+            .fetch_optional(pool)
             .await
-        {
-            use sqlx::Row;
+            .map_err(|e| ApiError::BadRequest(format!("Database error during eHRMS login: {e}")))?;
+
+        if let Some(row) = row {
             let id: Uuid = row.get("id");
             return Ok(Json(MockEhrmsLoginResponse {
                 success: true,
@@ -2629,6 +3312,11 @@ async fn mock_ehrms_login(
                     role: row.get("role"),
                 }
             }));
+        } else {
+            return Err(ApiError::NotFound(format!(
+                "Employee ID '{}' not found in eHRMS registry. Valid demo IDs: EMP001 to EMP010",
+                payload.employee_id
+            )));
         }
     }
 
@@ -2648,36 +3336,189 @@ async fn mock_ehrms_login(
 
 async fn list_mock_ehrms_employees(
     State(state): State<AppState>,
-) -> Json<Vec<EhrmsEmployee>> {
+) -> Result<Json<Vec<EhrmsEmployee>>, ApiError> {
     if let Some(ref pool) = state.pool {
-        if let Ok(records) = sqlx::query("SELECT id, employee_id, name, designation, department, role FROM users")
+        use sqlx::Row;
+        let records = sqlx::query("SELECT id, employee_id, name, designation, department, role FROM users ORDER BY employee_id ASC")
             .fetch_all(pool)
             .await
-        {
-            use sqlx::Row;
-            let mut list = Vec::new();
-            for row in records {
-                let id: Uuid = row.get("id");
-                list.push(EhrmsEmployee {
-                    id: id.to_string(),
-                    employee_id: row.get("employee_id"),
-                    name: row.get("name"),
-                    designation: row.get("designation"),
-                    department: row.get("department"),
-                    role: row.get("role"),
-                });
-            }
-            if !list.is_empty() {
-                list.sort_by(|a, b| a.employee_id.cmp(&b.employee_id));
-                return Json(list);
-            }
+            .map_err(|e| ApiError::BadRequest(format!("Failed to query users table: {e}")))?;
+
+        let mut list = Vec::new();
+        for row in records {
+            let id: Uuid = row.get("id");
+            list.push(EhrmsEmployee {
+                id: id.to_string(),
+                employee_id: row.get("employee_id"),
+                name: row.get("name"),
+                designation: row.get("designation"),
+                department: row.get("department"),
+                role: row.get("role"),
+            });
         }
+        return Ok(Json(list));
     }
 
     let in_mem = state.in_memory.read().unwrap();
     let mut list: Vec<EhrmsEmployee> = in_mem.ehrms_employees.values().cloned().collect();
     list.sort_by(|a, b| a.employee_id.cmp(&b.employee_id));
-    Json(list)
+    Ok(Json(list))
+}
+
+async fn get_dashboard_kpis(
+    State(state): State<AppState>,
+) -> Result<Json<Vec<DashboardKpi>>, ApiError> {
+    if let Some(ref pool) = state.pool {
+        use sqlx::Row;
+        let project_count: i64 = sqlx::query("SELECT count(*) FROM project")
+            .fetch_one(pool)
+            .await
+            .map(|r| r.get(0))
+            .unwrap_or(0);
+
+        let budget_sum: i64 = sqlx::query("SELECT coalesce(sum(budget_paise), 0)::bigint FROM project")
+            .fetch_one(pool)
+            .await
+            .map(|r| r.get(0))
+            .unwrap_or(0);
+
+        let area_sum: f64 = sqlx::query("SELECT coalesce(sum(area_hectares), 0)::float8 FROM parcel")
+            .fetch_one(pool)
+            .await
+            .map(|r| r.get(0))
+            .unwrap_or(0.0);
+
+        let budget_cr = (budget_sum as f64) / 100_000_000_00.0;
+
+        let kpis = vec![
+            DashboardKpi {
+                label: "Active projects".to_string(),
+                value: format!("{}", project_count.max(1)),
+                delta: "+1 this quarter".to_string(),
+                tone: "mint".to_string(),
+                icon: "⌁".to_string(),
+            },
+            DashboardKpi {
+                label: "Land acquired".to_string(),
+                value: format!("{:.1} Ha", area_sum),
+                delta: "Verified via DILRMP".to_string(),
+                tone: "gold".to_string(),
+                icon: "◒".to_string(),
+            },
+            DashboardKpi {
+                label: "Compensation pending".to_string(),
+                value: format!("₹{:.0} Cr", budget_cr),
+                delta: "PFMS DBT pipeline ready".to_string(),
+                tone: "coral".to_string(),
+                icon: "₹".to_string(),
+            },
+            DashboardKpi {
+                label: "Statutory SLA compliance".to_string(),
+                value: "100%".to_string(),
+                delta: "RFCTLARR 2013 schedule".to_string(),
+                tone: "blue".to_string(),
+                icon: "↗".to_string(),
+            },
+        ];
+
+        return Ok(Json(kpis));
+    }
+
+    Ok(Json(vec![
+        DashboardKpi {
+            label: "Active projects".to_string(),
+            value: "1".to_string(),
+            delta: "+1 this quarter".to_string(),
+            tone: "mint".to_string(),
+            icon: "⌁".to_string(),
+        },
+        DashboardKpi {
+            label: "Land acquired".to_string(),
+            value: "2.5 Ha".to_string(),
+            delta: "Verified via DILRMP".to_string(),
+            tone: "gold".to_string(),
+            icon: "◒".to_string(),
+        },
+        DashboardKpi {
+            label: "Compensation pending".to_string(),
+            value: "₹312 Cr".to_string(),
+            delta: "PFMS DBT pipeline ready".to_string(),
+            tone: "coral".to_string(),
+            icon: "₹".to_string(),
+        },
+        DashboardKpi {
+            label: "Statutory SLA compliance".to_string(),
+            value: "100%".to_string(),
+            delta: "RFCTLARR 2013 schedule".to_string(),
+            tone: "blue".to_string(),
+            icon: "↗".to_string(),
+        },
+    ]))
+}
+
+async fn get_alerts(
+    State(state): State<AppState>,
+) -> Result<Json<Vec<AlertNotice>>, ApiError> {
+    if let Some(ref pool) = state.pool {
+        use sqlx::Row;
+        let rows = sqlx::query(
+            "SELECT alert_type, message, severity, due_at
+             FROM alert
+             ORDER BY due_at ASC"
+        )
+        .fetch_all(pool)
+        .await
+        .unwrap_or_default();
+
+        let mut notices = Vec::new();
+        for r in rows {
+            let alert_type: String = r.get("alert_type");
+            let message: String = r.get("message");
+            let severity: String = r.get("severity");
+
+            let tone = match severity.as_str() {
+                "high" | "critical" => "coral",
+                "medium" => "gold",
+                _ => "mint",
+            };
+
+            let (title, detail) = if let Some(idx) = message.find(':') {
+                (message[..idx].trim().to_string(), message[idx + 1..].trim().to_string())
+            } else {
+                (message.clone(), "RFCTLARR Act 2013 statutory timeline tracking.".to_string())
+            };
+
+            notices.push(AlertNotice {
+                label: alert_type,
+                title,
+                detail,
+                tone: tone.to_string(),
+            });
+        }
+
+        return Ok(Json(notices));
+    }
+
+    Ok(Json(vec![
+        AlertNotice {
+            label: "GATE 04".to_string(),
+            title: "Compensation award pack needs approval".to_string(),
+            detail: "12 of 18 village-level packets are ready for CALA sign-off.".to_string(),
+            tone: "coral".to_string(),
+        },
+        AlertNotice {
+            label: "PFMS".to_string(),
+            title: "₹46.2 Cr released to district escrow".to_string(),
+            detail: "Settlement batch PF-2026-091 cleared 06 Sep 2026.".to_string(),
+            tone: "mint".to_string(),
+        },
+        AlertNotice {
+            label: "R&R".to_string(),
+            title: "Household verification window closes soon".to_string(),
+            detail: "Kushinagar submissions close in 9 days.".to_string(),
+            tone: "gold".to_string(),
+        },
+    ]))
 }
 
 // Helpers
@@ -2689,19 +3530,22 @@ async fn visible_projects(actor: &Actor, state: &AppState) -> Result<Vec<Project
     if state.pool.is_some() {
         match state.project_repo.list_projects_async().await {
             Ok(all_projects) => {
-                if !all_projects.is_empty() {
-                    return Ok(all_projects
-                        .into_iter()
-                        .filter(|p| jurisdiction_matches(actor, p))
-                        .collect());
-                }
+                return Ok(all_projects
+                    .into_iter()
+                    .filter(|p| jurisdiction_matches(actor, p))
+                    .collect());
             }
             Err(err) => {
-                eprintln!("ERROR in list_projects_async: {:?}", err);
+                return Err(ApiError::ServiceUnavailable(format!("PostgreSQL database query failed: {:?}", err)));
             }
         }
     }
     let in_mem = state.in_memory.read().unwrap();
+    if in_mem.projects.is_empty() {
+        return Err(ApiError::ServiceUnavailable(
+            "PostgreSQL database connection required. DATABASE_URL is not set or PostgreSQL is unreachable.".to_string(),
+        ));
+    }
     Ok(in_mem
         .projects
         .values()
@@ -2989,9 +3833,72 @@ fn decode_base64url(value: &str) -> Option<Vec<u8>> {
 mod tests {
     use super::*;
 
+    fn test_store() -> InMemoryStore {
+        let mut store = InMemoryStore::empty();
+        let employees = vec![
+            ("EMP001", "Raj Sharma", "Collector", "District Administration", "COLLECTOR"),
+            ("EMP002", "Amit Verma", "Revenue Officer", "Revenue Department", "REVENUE_OFFICER"),
+            ("EMP003", "Neha Singh", "GIS Officer", "Survey Department", "GIS_OFFICER"),
+            ("EMP004", "Ravi Kumar", "Finance Officer", "Finance Department", "FINANCE_OFFICER"),
+            ("EMP005", "Suresh Patel", "Rehabilitation Officer", "R&R Department", "REHABILITATION_OFFICER"),
+            ("EMP006", "Praveen Singhal", "Chief Project Officer", "Land Requiring Body (NHAI)", "LAND_REQUIRING_BODY"),
+            ("EMP007", "Dr. Arvinder Roy", "SIA Officer", "Social Impact Assessment Unit", "SIA_OFFICER"),
+            ("EMP008", "Harish Meena", "Additional Collector", "District Collectorate / CALA", "ADDITIONAL_COLLECTOR"),
+            ("EMP009", "Adv. Madhav Joshi", "Legal Officer", "Legal & Litigation Cell", "LEGAL_OFFICER"),
+            ("EMP010", "Meenakshi Sundaram", "Joint Secretary / Reviewer", "Appropriate Government / Oversight", "GOVERNMENT_REVIEWER"),
+        ];
+        for (emp_id, name, desig, dept, role) in employees {
+            store.ehrms_employees.insert(
+                emp_id.to_string(),
+                EhrmsEmployee {
+                    id: Uuid::new_v4().to_string(),
+                    employee_id: emp_id.to_string(),
+                    name: name.to_string(),
+                    designation: desig.to_string(),
+                    department: dept.to_string(),
+                    role: role.to_string(),
+                },
+            );
+        }
+
+        let p_id = Uuid::parse_str("a0000000-0000-0000-0000-000000000001").unwrap();
+        let w_id = Uuid::parse_str("b0000000-0000-0000-0000-000000000001").unwrap();
+        let project = Project {
+            id: p_id,
+            name: "Delhi-Mumbai Expressway Package 14".to_string(),
+            authority: Authority::Larr,
+            state_code: "MH".to_string(),
+            district_code: "THN".to_string(),
+            stage: ProjectStage::LandRecordVerification,
+            parcels: Vec::new(),
+            preliminary_notification_at: None,
+            updated_at: Utc::now(),
+        };
+        let handler = sih_workflow::who_handles_stage(&ProjectStage::LandRecordVerification);
+        let workflow = WorkflowInstance {
+            id: w_id,
+            project_id: p_id,
+            authority: Authority::Larr,
+            current_stage: ProjectStage::LandRecordVerification,
+            started_at: Utc::now(),
+            notification_at: None,
+            deadline_at: Some(Utc::now() + chrono::Duration::days(handler.timeline_days as i64)),
+            completed_at: None,
+            lapsed_at: None,
+            responsible_department: Some(handler.department_code.to_string()),
+            responsible_role: Some(handler.role_code.to_string()),
+            stage_timeline_days: Some(handler.timeline_days),
+        };
+        store.projects.insert(p_id, project);
+        store.workflows.insert(w_id, workflow);
+        store.project_to_workflow.insert(p_id, w_id);
+
+        store
+    }
+
     #[test]
     fn test_ehrms_employees_seeded() {
-        let store = InMemoryStore::seeded();
+        let store = test_store();
         assert_eq!(store.ehrms_employees.len(), 10);
 
         let collector = store.ehrms_employees.get("EMP001").unwrap();
@@ -3049,7 +3956,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_stage_gate_approve_and_reject_flow() {
-        let store = InMemoryStore::seeded();
+        let store = test_store();
         let p_id = *store.projects.keys().next().unwrap();
         let w_id = store.project_to_workflow[&p_id];
 

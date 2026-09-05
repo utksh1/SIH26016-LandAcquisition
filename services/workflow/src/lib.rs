@@ -972,7 +972,7 @@ pub async fn get_approval_history(
         .collect())
 }
 
-async fn record_approval(
+pub async fn record_approval(
     pool: &PgPool,
     workflow_id: Uuid,
     from_stage: ProjectStage,

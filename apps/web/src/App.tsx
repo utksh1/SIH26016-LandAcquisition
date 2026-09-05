@@ -13,6 +13,8 @@ import {
   type DepartmentInfo,
   type ObjectionItem,
   type RehabilitationInfo,
+  type DashboardKpi,
+  type AlertNotice,
   type ApiProject,
   type Language,
   type Project,
@@ -35,14 +37,14 @@ const DEFAULT_PROJECT: Project = {
   amount: '',
 }
 
-const kpis = [
-  { label: 'Active projects', value: '42', delta: '+6 this quarter', tone: 'mint', icon: '⌁' },
-  { label: 'Land acquired', value: '68.4%', delta: '+4.8% vs last month', tone: 'gold', icon: '◒' },
-  { label: 'Compensation pending', value: '₹312 Cr', delta: '18 awards need action', tone: 'coral', icon: '₹' },
-  { label: 'Days to next gate', value: '13', delta: 'NH-48 · 18 Sep 2026', tone: 'blue', icon: '↗' },
+const DEFAULT_KPIS: DashboardKpi[] = [
+  { label: 'Active projects', value: '1', delta: '+1 this quarter', tone: 'mint', icon: '⌁' },
+  { label: 'Land acquired', value: '2.5 Ha', delta: 'Verified via DILRMP', tone: 'gold', icon: '◒' },
+  { label: 'Compensation pending', value: '₹312 Cr', delta: 'PFMS DBT pipeline ready', tone: 'coral', icon: '₹' },
+  { label: 'Statutory SLA compliance', value: '100%', delta: 'RFCTLARR 2013 schedule', tone: 'blue', icon: '↗' },
 ]
 
-const notices = [
+const DEFAULT_NOTICES: AlertNotice[] = [
   { label: 'GATE 04', title: 'Compensation award pack needs approval', detail: '12 of 18 village-level packets are ready for CALA sign-off.', tone: 'coral' },
   { label: 'PFMS', title: '₹46.2 Cr released to district escrow', detail: 'Settlement batch PF-2026-091 cleared 06 Sep 2026.', tone: 'mint' },
   { label: 'R&R', title: 'Household verification window closes soon', detail: 'Kushinagar submissions close in 9 days.', tone: 'gold' },
@@ -272,16 +274,16 @@ const stakeholderPersonas: StakeholderPersona[] = [
   },
   {
     id: 'additional_collector',
-    employeeId: 'EMP009',
+    employeeId: 'EMP008',
     role: 'Additional Collector',
     ehrmsRole: 'ADDITIONAL_COLLECTOR',
     dashboardRoute: '/dashboard/collector',
     title: 'Additional Collector',
-    subtitle: 'District Administration / CALA',
-    name: 'Priya Menon',
-    designation: 'Additional Collector (LARR)',
-    department: 'Land Acquisition Authority',
-    badge: 'ADDL COLLECTOR [EMP009]',
+    subtitle: 'District Collectorate / CALA',
+    name: 'Harish Meena',
+    designation: 'Additional Collector',
+    department: 'District Collectorate / CALA',
+    badge: 'ADDL COLLECTOR [EMP008]',
     icon: 'folder',
     color: '#9c6f39',
     description: 'Section 19 declaration scrutiny, Section 23/30 award scrutiny, and multi-tehsil coordination.',
@@ -325,9 +327,9 @@ const stakeholderPersonas: StakeholderPersona[] = [
     ehrmsRole: 'SIA_OFFICER',
     dashboardRoute: '/dashboard/revenue',
     title: 'SIA Officer',
-    subtitle: 'Social Impact Assessment Directorate',
-    name: 'Dr. Sunita Rao',
-    designation: 'SIA Lead Officer',
+    subtitle: 'Social Impact Assessment Unit',
+    name: 'Dr. Arvinder Roy',
+    designation: 'SIA Officer',
     department: 'Social Impact Assessment Unit',
     badge: 'SIA OFFICER [EMP007]',
     icon: 'people',
@@ -336,16 +338,16 @@ const stakeholderPersonas: StakeholderPersona[] = [
   },
   {
     id: 'legal_officer',
-    employeeId: 'EMP008',
+    employeeId: 'EMP009',
     role: 'Legal Officer',
     ehrmsRole: 'LEGAL_OFFICER',
     dashboardRoute: '/dashboard/collector',
     title: 'Legal Officer',
-    subtitle: 'Legal & Land Affairs Directorate',
-    name: 'Adv. Rajesh Khanna',
-    designation: 'Chief Legal Advisor',
-    department: 'Legal & Land Affairs',
-    badge: 'LEGAL OFFICER [EMP008]',
+    subtitle: 'Legal & Litigation Cell',
+    name: 'Adv. Madhav Joshi',
+    designation: 'Legal Officer',
+    department: 'Legal & Litigation Cell',
+    badge: 'LEGAL OFFICER [EMP009]',
     icon: 'folder',
     color: '#684534',
     description: 'Statutory compliance verification, draft Section 23 award formulation, circle rate validation, and litigation clearance.',
@@ -398,28 +400,32 @@ const stakeholderPersonas: StakeholderPersona[] = [
   },
   {
     id: 'requiring_body',
+    employeeId: 'EMP006',
     role: 'Land Requiring Body',
+    ehrmsRole: 'LAND_REQUIRING_BODY',
     dashboardRoute: '/dashboard/requiring-body',
     title: 'Land Requiring Body',
-    subtitle: 'NHAI / Project Implementing Agency',
-    name: 'Vikram Verma',
+    subtitle: 'Land Requiring Body (NHAI)',
+    name: 'Praveen Singhal',
     designation: 'Chief Project Officer',
-    department: 'National Highways Authority (NHAI)',
-    badge: 'STAGE 0: PROPOSAL',
+    department: 'Land Requiring Body (NHAI)',
+    badge: 'REQ BODY [EMP006]',
     icon: 'building',
     color: '#91723e',
     description: 'Initiate land acquisition proposal, upload DPR feasibility reports, and track statutory progress.',
   },
   {
     id: 'government_dashboard',
+    employeeId: 'EMP010',
     role: 'Government Reviewer',
+    ehrmsRole: 'GOVERNMENT_REVIEWER',
     dashboardRoute: '/dashboard/government',
     title: 'Government Reviewer',
-    subtitle: 'National Infrastructure Pipeline',
-    name: 'Dr. Aarav Sharma',
-    designation: 'Joint Secretary (Infrastructure)',
-    department: 'Cabinet Secretariat / NITI Aayog',
-    badge: 'NATIONAL OVERSIGHT',
+    subtitle: 'Appropriate Government / Oversight',
+    name: 'Meenakshi Sundaram',
+    designation: 'Joint Secretary / Reviewer',
+    department: 'Appropriate Government / Oversight',
+    badge: 'REVIEWER [EMP010]',
     icon: 'shield',
     color: '#10251f',
     description: 'National overview across 18 states, AI delay risk prediction, cryptographic audit ledger, and workflow regimes.',
@@ -652,6 +658,8 @@ export default function App() {
   const [projects, setProjects] = useState<Project[]>([])
   const [selected, setSelected] = useState<Project>(DEFAULT_PROJECT)
   const [currentStageIdx, setCurrentStageIdx] = useState(0)
+  const [kpis, setKpis] = useState<DashboardKpi[]>(DEFAULT_KPIS)
+  const [notices, setNotices] = useState<AlertNotice[]>(DEFAULT_NOTICES)
   const [loading, setLoading] = useState(false)
   const [toastMessage, setToastMessage] = useState<string | null>(null)
   const [backendError, setBackendError] = useState(false)
@@ -682,6 +690,15 @@ export default function App() {
       console.error('Backend unreachable:', err)
       setBackendError(true)
     })
+
+    // Fetch dynamic KPIs and alerts from PostgreSQL backend
+    apiClient.getDashboardKpis().then((res) => {
+      if (res && res.length > 0) setKpis(res)
+    }).catch(err => console.warn('Dynamic KPI fetch:', err))
+
+    apiClient.getAlerts().then((res) => {
+      if (res && res.length > 0) setNotices(res)
+    }).catch(err => console.warn('Alerts fetch:', err))
   }, [])
 
   // Sync current stage index
@@ -1857,6 +1874,34 @@ export default function App() {
               </article>
             ))}
           </section>
+
+          {/* Dynamic Statutory Alerts Banner from PostgreSQL */}
+          {notices.length > 0 && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12, marginBottom: 16 }}>
+              {notices.map((n, idx) => (
+                <div
+                  key={idx}
+                  style={{
+                    background: '#ffffff',
+                    border: '1px solid #dce2d6',
+                    borderLeft: `4px solid ${n.tone === 'coral' ? '#dc2626' : n.tone === 'gold' ? '#d97706' : '#16a34a'}`,
+                    borderRadius: 6,
+                    padding: '10px 14px',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: n.tone === 'coral' ? '#dc2626' : n.tone === 'gold' ? '#d97706' : '#16a34a' }}>
+                      {n.label}
+                    </span>
+                    <span style={{ fontSize: 9, color: '#688072', textTransform: 'uppercase', letterSpacing: '0.04em' }}>STATUTORY SLA NOTICE</span>
+                  </div>
+                  <strong style={{ fontSize: 13, color: '#10251f', display: 'block', marginBottom: 2 }}>{n.title}</strong>
+                  <p style={{ fontSize: 11, color: '#607567', margin: 0, lineHeight: 1.4 }}>{n.detail}</p>
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* Main Grid */}
           <section className="content-grid">

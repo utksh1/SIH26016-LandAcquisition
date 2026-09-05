@@ -98,6 +98,21 @@ export interface WorkflowStakeholdersResponse {
   roles: WorkflowRoleInfo[]
 }
 
+export interface DashboardKpi {
+  label: string
+  value: string
+  delta: string
+  tone: string
+  icon: string
+}
+
+export interface AlertNotice {
+  label: string
+  title: string
+  detail: string
+  tone: string
+}
+
 export interface ObjectionItem {
   id: string
   project_id: string
@@ -306,6 +321,8 @@ export interface ApiClient {
   listWorkflowStages(): Promise<StageDefinition[]>
   getWorkflowStage(code: string): Promise<StageDefinition>
   getWorkflowStakeholders(): Promise<WorkflowStakeholdersResponse>
+  getDashboardKpis(): Promise<DashboardKpi[]>
+  getAlerts(): Promise<AlertNotice[]>
 }
 
 const defaultBaseUrl = 'http://localhost:3000'
@@ -358,6 +375,8 @@ export const apiPaths = {
   pfmsPayments: '/pfms/payments',
   documentExtraction: '/documents/extract',
   delayRisk: (projectId: string) => `/projects/${encodeURIComponent(projectId)}/delay-risk`,
+  dashboardKpis: '/dashboard/kpis',
+  alerts: '/alerts',
 } as const
 
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T
@@ -498,6 +517,8 @@ export const apiClient: ApiClient = {
   listWorkflowStages: () => request<StageDefinition[]>('GET', apiPaths.workflowStages),
   getWorkflowStage: (code: string) => request<StageDefinition>('GET', apiPaths.workflowStage(code)),
   getWorkflowStakeholders: () => request<WorkflowStakeholdersResponse>('GET', apiPaths.workflowStakeholders),
+  getDashboardKpis: () => request<DashboardKpi[]>('GET', apiPaths.dashboardKpis),
+  getAlerts: () => request<AlertNotice[]>('GET', apiPaths.alerts),
 }
 
 export const isApiConfigured = Boolean(activeBaseUrl)
