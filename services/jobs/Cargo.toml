@@ -5,6 +5,9 @@ edition.workspace = true
 
 [dependencies]
 chrono.workspace = true
+sqlx = { version = "0.8", features = ["postgres", "runtime-tokio-native-tls", "uuid", "chrono"] }
+tokio = { workspace = true, features = ["time"] }
+uuid.workspace = true
 sih-domain = { path = "../domain" }
 sih-integrations = { path = "../integrations" }
 sih-workflow = { path = "../workflow" }

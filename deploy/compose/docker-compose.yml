@@ -15,8 +15,10 @@ services:
       - ../../db/migrations/004_workflow_instance_fk.sql:/docker-entrypoint-initdb.d/004_workflow_instance_fk.sql:ro
       - ../../db/migrations/005_audit_and_workflow_persistence.sql:/docker-entrypoint-initdb.d/005_audit_and_workflow_persistence.sql:ro
       - ../../db/migrations/006_reenable_postgis.sql:/docker-entrypoint-initdb.d/006_reenable_postgis.sql:ro
-      - ../../db/seeds/demo.sql:/docker-entrypoint-initdb.d/007_demo.sql:ro
-      - ../../db/fixtures/workflow.sql:/docker-entrypoint-initdb.d/008_workflow.sql:ro
+      - ../../db/migrations/007_ownership_status.sql:/docker-entrypoint-initdb.d/007_ownership_status.sql:ro
+      - ../../db/migrations/008_process_type_branches.sql:/docker-entrypoint-initdb.d/008_process_type_branches.sql:ro
+      - ../../db/seeds/demo.sql:/docker-entrypoint-initdb.d/009_demo.sql:ro
+      - ../../db/fixtures/workflow.sql:/docker-entrypoint-initdb.d/010_workflow.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
