@@ -24,6 +24,7 @@ import {
   type ApiProject,
   type Language,
   type Project,
+  type ProjectStage,
   type Role,
 } from './api/mockData'
 
@@ -205,12 +206,15 @@ function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
 export type StakeholderId =
   | 'requiring_body'
   | 'collector'
+  | 'additional_collector'
   | 'revenue_officer'
   | 'gis_surveyor'
+  | 'sia_officer'
+  | 'legal_officer'
   | 'finance_officer'
   | 'rehabilitation_officer'
-  | 'land_owner'
   | 'government_dashboard'
+  | 'land_owner'
 
 export interface StakeholderPersona {
   id: StakeholderId
@@ -247,6 +251,22 @@ const stakeholderPersonas: StakeholderPersona[] = [
     description: 'Active projects review, pending statutory gate approvals, acquisition workflow status, notifications, and reports.',
   },
   {
+    id: 'additional_collector',
+    employeeId: 'EMP009',
+    role: 'Additional Collector',
+    ehrmsRole: 'ADDITIONAL_COLLECTOR',
+    dashboardRoute: '/dashboard/collector',
+    title: 'Additional Collector',
+    subtitle: 'District Administration / CALA',
+    name: 'Priya Menon',
+    designation: 'Additional Collector (LARR)',
+    department: 'Land Acquisition Authority',
+    badge: 'ADDL COLLECTOR [EMP009]',
+    icon: 'folder',
+    color: '#9c6f39',
+    description: 'Section 19 declaration scrutiny, Section 23/30 award scrutiny, and multi-tehsil coordination.',
+  },
+  {
     id: 'revenue_officer',
     employeeId: 'EMP002',
     role: 'Revenue Officer',
@@ -265,7 +285,7 @@ const stakeholderPersonas: StakeholderPersona[] = [
   {
     id: 'gis_surveyor',
     employeeId: 'EMP003',
-    role: 'Revenue Officer',
+    role: 'GIS Officer',
     ehrmsRole: 'GIS_OFFICER',
     dashboardRoute: '/dashboard/gis',
     title: 'GIS Officer',
@@ -279,9 +299,41 @@ const stakeholderPersonas: StakeholderPersona[] = [
     description: 'Interactive cadastral parcel map, project Right-of-Way boundaries, and spatial GIS demarcation tasks.',
   },
   {
+    id: 'sia_officer',
+    employeeId: 'EMP007',
+    role: 'SIA Officer',
+    ehrmsRole: 'SIA_OFFICER',
+    dashboardRoute: '/dashboard/revenue',
+    title: 'SIA Officer',
+    subtitle: 'Social Impact Assessment Directorate',
+    name: 'Dr. Sunita Rao',
+    designation: 'SIA Lead Officer',
+    department: 'Social Impact Assessment Unit',
+    badge: 'SIA OFFICER [EMP007]',
+    icon: 'people',
+    color: '#526938',
+    description: 'Section 4 SIA public hearing documentation, affected families census baseline, and Social Impact Management Plan (SIMP).',
+  },
+  {
+    id: 'legal_officer',
+    employeeId: 'EMP008',
+    role: 'Legal Officer',
+    ehrmsRole: 'LEGAL_OFFICER',
+    dashboardRoute: '/dashboard/collector',
+    title: 'Legal Officer',
+    subtitle: 'Legal & Land Affairs Directorate',
+    name: 'Adv. Rajesh Khanna',
+    designation: 'Chief Legal Advisor',
+    department: 'Legal & Land Affairs',
+    badge: 'LEGAL OFFICER [EMP008]',
+    icon: 'folder',
+    color: '#684534',
+    description: 'Statutory compliance verification, draft Section 23 award formulation, circle rate validation, and litigation clearance.',
+  },
+  {
     id: 'finance_officer',
     employeeId: 'EMP004',
-    role: 'Admin',
+    role: 'Finance Officer',
     ehrmsRole: 'FINANCE_OFFICER',
     dashboardRoute: '/dashboard/finance',
     title: 'Finance Officer',
@@ -297,7 +349,7 @@ const stakeholderPersonas: StakeholderPersona[] = [
   {
     id: 'rehabilitation_officer',
     employeeId: 'EMP005',
-    role: 'Collector',
+    role: 'Rehabilitation Officer',
     ehrmsRole: 'REHABILITATION_OFFICER',
     dashboardRoute: '/dashboard/rehabilitation',
     title: 'Rehabilitation Officer',
@@ -326,7 +378,7 @@ const stakeholderPersonas: StakeholderPersona[] = [
   },
   {
     id: 'requiring_body',
-    role: 'Admin',
+    role: 'Land Requiring Body',
     dashboardRoute: '/dashboard/requiring-body',
     title: 'Land Requiring Body',
     subtitle: 'NHAI / Project Implementing Agency',
@@ -340,9 +392,9 @@ const stakeholderPersonas: StakeholderPersona[] = [
   },
   {
     id: 'government_dashboard',
-    role: 'Admin',
+    role: 'Government Reviewer',
     dashboardRoute: '/dashboard/government',
-    title: 'Government Dashboard',
+    title: 'Government Reviewer',
     subtitle: 'National Infrastructure Pipeline',
     name: 'Dr. Aarav Sharma',
     designation: 'Joint Secretary (Infrastructure)',
@@ -354,27 +406,203 @@ const stakeholderPersonas: StakeholderPersona[] = [
   },
 ]
 
-// RFCTLARR 8 Canonical Stages
-const rfctlarrStages = [
-  { id: 'proposal', name: 'Proposal Creation', actor: 'Land Requiring Body', stageCode: 'draft' },
-  { id: 'verification', name: 'Land Verification', actor: 'Revenue & GIS Officers', stageCode: 'survey' },
-  { id: 'sia', name: 'Social Impact (SIA)', actor: 'Collector + SIA Team', stageCode: 'survey' },
-  { id: 'notification', name: 'Preliminary Notice (Sec 11)', actor: 'Collector', stageCode: 'preliminary_notification' },
-  { id: 'objection', name: 'Objections & Hearing (Sec 15)', actor: 'Land Owner + Collector', stageCode: 'public_hearing' },
-  { id: 'award', name: 'Award Generation (Sec 23/30)', actor: 'Collector + Finance', stageCode: 'compensation_award' },
-  { id: 'payment', name: 'Compensation Payment', actor: 'Finance Department', stageCode: 'funds_disbursed' },
-  { id: 'possession', name: 'Possession & Closure', actor: 'Collector + Rehabilitation', stageCode: 'possession' },
+export interface StatutoryStageItem {
+  id: string
+  name: string
+  department: string
+  actor: string
+  stageCode: ProjectStage
+  timelineDays: number
+  approvalAuthority: string
+  requiredDocs: string[]
+  auditRequirements: string
+}
+
+// RFCTLARR 15 Statutory Legal Stages
+const rfctlarrStages: StatutoryStageItem[] = [
+  {
+    id: 'proposal_initiation',
+    name: 'Proposal Initiation',
+    department: 'Land Requiring Body',
+    actor: 'Land Requiring Body',
+    stageCode: 'proposal_initiation',
+    timelineDays: 30,
+    approvalAuthority: 'Central/State Sanctioning Authority',
+    requiredDocs: ['Detailed Project Report (DPR)', 'Land Alignment Plan Shapefile', 'Village Survey List', 'Budget Sanction Order'],
+    auditRequirements: 'Project proposal logged with alignment geometry hash and budget sanction reference.',
+  },
+  {
+    id: 'land_record_verification',
+    name: 'Land Record Verification',
+    department: 'State Revenue Department',
+    actor: 'Revenue Officer',
+    stageCode: 'land_record_verification',
+    timelineDays: 45,
+    approvalAuthority: 'Sub-Divisional Magistrate (SDM)',
+    requiredDocs: ['Cadastral Map Sheet', 'Jamabandi RoR Extracts', 'DILRMP Sync Record', 'Title Verification Certificate'],
+    auditRequirements: 'Cadastral land records verified against State DILRMP with ULPIN and mutation status.',
+  },
+  {
+    id: 'sia_preparation',
+    name: 'SIA Preparation',
+    department: 'Social Impact Assessment Unit',
+    actor: 'SIA Officer',
+    stageCode: 'sia_preparation',
+    timelineDays: 60,
+    approvalAuthority: 'District Collector',
+    requiredDocs: ['SIA Terms of Reference (ToR)', 'Public Consultation Notice', 'Baseline Census Agency MoA'],
+    auditRequirements: 'SIA public notice published in affected gram panchayats; baseline census initiated.',
+  },
+  {
+    id: 'sia_review',
+    name: 'SIA Review',
+    department: 'Independent Expert Group',
+    actor: 'Government Reviewer',
+    stageCode: 'sia_review',
+    timelineDays: 60,
+    approvalAuthority: 'Independent Expert Group / State Government',
+    requiredDocs: ['SIA Study Report', 'Social Impact Management Plan (SIMP)', 'Expert Group Recommendations'],
+    auditRequirements: 'Independent Expert Group recommendations evaluated and approved by Appropriate Government.',
+  },
+  {
+    id: 'preliminary_notification',
+    name: 'Preliminary Notification (Sec 11)',
+    department: 'Land Acquisition Department / CALA',
+    actor: 'Collector',
+    stageCode: 'preliminary_notification',
+    timelineDays: 30,
+    approvalAuthority: 'District Collector / Official Gazette',
+    requiredDocs: ['Sec 11(1) Gazette Notification PDF', 'Local Newspaper Publications', 'Gram Sabha Resolution'],
+    auditRequirements: 'Section 11 Gazette Extraordinary published; land transaction freeze flag applied.',
+  },
+  {
+    id: 'objection_period',
+    name: 'Objection Period (Sec 15)',
+    department: 'Public Citizen Transparency Desk',
+    actor: 'Land Owner',
+    stageCode: 'objection_period',
+    timelineDays: 60,
+    approvalAuthority: 'District Collector & CALA',
+    requiredDocs: ['Sec 15(1) Objection Petitions', 'Ownership Proof Documents'],
+    auditRequirements: 'Statutory 60-day objection window opened; citizen claims recorded with ticket IDs.',
+  },
+  {
+    id: 'hearing',
+    name: 'Hearing & Disposal',
+    department: 'Land Acquisition Authority (CALA)',
+    actor: 'Collector',
+    stageCode: 'hearing',
+    timelineDays: 30,
+    approvalAuthority: 'District Collector',
+    requiredDocs: ['Sec 15(2) Hearing Minutes', 'Collector Inquiry Disposal Order'],
+    auditRequirements: 'Section 15(2) personal hearings conducted; written disposal orders issued to objectors.',
+  },
+  {
+    id: 'declaration',
+    name: 'Declaration (Sec 19)',
+    department: 'State Revenue Department',
+    actor: 'Additional Collector',
+    stageCode: 'declaration',
+    timelineDays: 365,
+    approvalAuthority: 'Appropriate Government',
+    requiredDocs: ['Sec 19(1) Declaration Order', 'Approved R&R Scheme Summary', 'Fund Deposit Receipt'],
+    auditRequirements: 'Section 19 Declaration issued within statutory 12-month limit; R&R scheme summary gazetted.',
+  },
+  {
+    id: 'award_preparation',
+    name: 'Award Preparation (Sec 23)',
+    department: 'Legal & Valuation Department',
+    actor: 'Legal Officer',
+    stageCode: 'award_preparation',
+    timelineDays: 60,
+    approvalAuthority: 'Competent Authority Land Acquisition (CALA)',
+    requiredDocs: ['Joint Measurement Survey Sheet', 'Asset & Crop Valuation Schedule', 'Circle Rate Schedule'],
+    auditRequirements: 'True market value determined under Sec 26; attachment valuations completed per Sec 29.',
+  },
+  {
+    id: 'award_approval',
+    name: 'Award Approval',
+    department: 'District Administration',
+    actor: 'Collector',
+    stageCode: 'award_approval',
+    timelineDays: 30,
+    approvalAuthority: 'District Collector / Commissioner',
+    requiredDocs: ['Sec 23/30 Final Award Order', 'Compensation Apportionment Statement'],
+    auditRequirements: 'Formal Section 23/30 award approved under Collector DSC signature with apportionment sheet.',
+  },
+  {
+    id: 'compensation_calculation',
+    name: 'Compensation Calculation',
+    department: 'Finance & Accounts Department',
+    actor: 'Finance Officer',
+    stageCode: 'compensation_calculation',
+    timelineDays: 15,
+    approvalAuthority: 'Chief Accounts Officer / Treasury',
+    requiredDocs: ['Market Value Computation Sheet', '100% Solatium Determination Sheet', 'Interest Accrual Statement'],
+    auditRequirements: 'First Schedule 100% Solatium computed and 12% p.a. additional interest accrued under Sec 30(3).',
+  },
+  {
+    id: 'payment_processing',
+    name: 'Payment Processing',
+    department: 'Finance Department / PFMS Treasury',
+    actor: 'Finance Officer',
+    stageCode: 'payment_processing',
+    timelineDays: 30,
+    approvalAuthority: 'Treasury Officer / PFMS',
+    requiredDocs: ['PFMS Sanction Order', 'DBT Payment Advice Note', 'Bank UTR Acknowledgements'],
+    auditRequirements: 'Direct Benefit Transfer disbursed through PFMS with live UTR numbers recorded.',
+  },
+  {
+    id: 'possession',
+    name: 'Possession (Sec 38)',
+    department: 'Revenue & Land Acquisition Authority',
+    actor: 'Collector',
+    stageCode: 'possession',
+    timelineDays: 30,
+    approvalAuthority: 'District Collector / Requiring Body',
+    requiredDocs: ['Sec 38 Possession Certificate', 'Panchnama Site Record', 'Handover Memo'],
+    auditRequirements: 'Physical possession taken under Sec 38 after compensation payment; encumbrances extinguished.',
+  },
+  {
+    id: 'rr_completion',
+    name: 'R&R Completion',
+    department: 'Rehabilitation & Resettlement Wing',
+    actor: 'Rehabilitation Officer',
+    stageCode: 'rr_completion',
+    timelineDays: 90,
+    approvalAuthority: 'Administrator R&R / Commissioner',
+    requiredDocs: ['Schedule II Entitlement Delivery Receipts', 'Resettlement Housing Deed', 'Site Clearance Note'],
+    auditRequirements: 'Resettlement housing grants and subsistence allowances delivered to all affected families.',
+  },
+  {
+    id: 'project_closure',
+    name: 'Project Closure',
+    department: 'Ministry / Oversight Authority',
+    actor: 'Government Reviewer',
+    stageCode: 'project_closure',
+    timelineDays: 15,
+    approvalAuthority: 'Central/State Ministry',
+    requiredDocs: ['Revenue Title Mutation Order', 'Final Audit Reconciliation Certificate', 'Project Handover Sign-off'],
+    auditRequirements: 'Land mutated in government revenue records; final audit closed; project archived.',
+  },
 ]
 
 const stageToPersonaMap: Record<number, StakeholderId> = {
   0: 'requiring_body',
   1: 'revenue_officer',
-  2: 'collector',
-  3: 'collector',
-  4: 'land_owner',
-  5: 'collector',
-  6: 'finance_officer',
-  7: 'rehabilitation_officer',
+  2: 'sia_officer',
+  3: 'government_dashboard',
+  4: 'collector',
+  5: 'land_owner',
+  6: 'collector',
+  7: 'additional_collector',
+  8: 'legal_officer',
+  9: 'collector',
+  10: 'finance_officer',
+  11: 'finance_officer',
+  12: 'collector',
+  13: 'rehabilitation_officer',
+  14: 'government_dashboard',
 }
 
 function StatusPill({ status }: { status: Project['status'] }) {
@@ -654,11 +882,15 @@ export default function App() {
     const nextStage = rfctlarrStages[nextIdx]
     setCurrentStageIdx(nextIdx)
 
+    const targetPersonaId = stageToPersonaMap[nextIdx]
+    const found = stakeholderPersonas.find((p) => p.id === targetPersonaId)
+    if (found) setActivePersona(found)
+
     try {
       await apiClient.advanceWorkflow(selected.id, nextStage.stageCode as any).catch(() => {})
-      showToast(`Advanced to ${nextStage.name}! Actor: ${nextStage.actor}`)
+      showToast(`Advanced to Stage ${nextIdx}: ${nextStage.name}! Role: ${nextStage.actor} (${nextStage.department})`)
     } catch {
-      showToast(`Advanced to ${nextStage.name}!`)
+      showToast(`Advanced to Stage ${nextIdx}: ${nextStage.name}!`)
     }
     setShowGateReviewModal(false)
   }
@@ -1670,13 +1902,13 @@ export default function App() {
                     <div className="role-item-card">
                       <h4>
                         <span>Workflow Status</span>
-                        <span className="badge-success">STAGE {currentStageIdx} / 7</span>
+                        <span className="badge-success">STAGE {currentStageIdx} / {rfctlarrStages.length - 1}</span>
                       </h4>
                       <div style={{ fontSize: 12, color: '#2b4435' }}>
                         Current Gate: <strong>{rfctlarrStages[currentStageIdx].name}</strong>
                       </div>
                       <div style={{ fontSize: 11, color: '#687e72', marginTop: 4 }}>
-                        Lead Actor: {rfctlarrStages[currentStageIdx].actor}
+                        Lead Role: <strong>{rfctlarrStages[currentStageIdx].actor}</strong> ({rfctlarrStages[currentStageIdx].department})
                       </div>
                       <div style={{ marginTop: 8, height: 6, background: '#e2ecd9', borderRadius: 3, overflow: 'hidden' }}>
                         <div
@@ -2123,18 +2355,18 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* RFCTLARR 8 Stages Workflow Sequence */}
+                {/* RFCTLARR 15 Statutory Legal Stages Workflow Sequence */}
                 <div className="progress-heading">
                   <div>
-                    <p className="section-kicker">STATUTORY WORKFLOW PROGRESSION</p>
+                    <p className="section-kicker">STATUTORY WORKFLOW ORCHESTRATION</p>
                     <span style={{ fontSize: 11, color: '#688072' }}>
-                      RFCTLARR Act 2013 Statutory Lifecycle (8 Stages)
+                      RFCTLARR Act 2013 Legal Lifecycle (15 Statutory Stages)
                     </span>
                   </div>
-                  <span className="badge-success">● STAGE {currentStageIdx} OF 7 ACTIVE</span>
+                  <span className="badge-success">● STAGE {currentStageIdx} OF {rfctlarrStages.length - 1} ACTIVE</span>
                 </div>
 
-                <div className="workflow" aria-label="RFCTLARR Workflow stages">
+                <div className="workflow" aria-label="RFCTLARR Workflow stages" style={{ overflowX: 'auto', paddingBottom: 8, display: 'flex', gap: 12 }}>
                   {rfctlarrStages.map((stage, idx) => {
                     const state =
                       idx < currentStageIdx ? 'complete' : idx === currentStageIdx ? 'active' : 'queued'
@@ -2149,7 +2381,7 @@ export default function App() {
                           if (found) setActivePersona(found)
                           showToast(`Switched to: ${stage.name} (${found?.title})`)
                         }}
-                        style={{ cursor: 'pointer' }}
+                        style={{ cursor: 'pointer', minWidth: 120 }}
                       >
                         <div className="step-marker">
                           {state === 'complete' ? <Icon name="check" size={13} /> : <span>{idx}</span>}
@@ -2167,11 +2399,14 @@ export default function App() {
                 {/* Gate Action Banner */}
                 <div className="gate-banner">
                   <div className="gate-symbol">0{currentStageIdx}</div>
-                  <div>
-                    <span>CURRENT STATUTORY GATE</span>
-                    <strong>{rfctlarrStages[currentStageIdx].name}</strong>
-                    <p>
-                      Responsible: {rfctlarrStages[currentStageIdx].actor} · Verification & Digital Signature (DSC) sign-off
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4 }}>
+                      <span className="section-kicker" style={{ margin: 0 }}>CURRENT STATUTORY GATE</span>
+                      <span className="badge-warning" style={{ fontSize: 10 }}>{rfctlarrStages[currentStageIdx].timelineDays} DAYS STATUTORY SLA</span>
+                    </div>
+                    <strong style={{ fontSize: 16 }}>{rfctlarrStages[currentStageIdx].name}</strong>
+                    <p style={{ margin: '4px 0 0 0', fontSize: 12, color: '#4a6053' }}>
+                      <strong>Department:</strong> {rfctlarrStages[currentStageIdx].department} · <strong>Responsible Role:</strong> {rfctlarrStages[currentStageIdx].actor} · <strong>Authority:</strong> {rfctlarrStages[currentStageIdx].approvalAuthority}
                     </p>
                   </div>
                   <button
@@ -2812,33 +3047,40 @@ export default function App() {
               </button>
             </div>
             <div className="modal-body">
-              <div style={{ background: '#f4f6ee', padding: 12, borderRadius: 6, fontSize: 12 }}>
-                <strong>Current Stage:</strong> {rfctlarrStages[currentStageIdx].name}
-                <div style={{ color: '#556e5e', marginTop: 4 }}>
-                  Statutory Check: Compliance with Section 11/15/23 of RFCTLARR Act 2013 & Hard Lapse Gates.
+              <div style={{ background: '#f4f6ee', padding: 14, borderRadius: 6, fontSize: 13, border: '1px solid #d4dfd4' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                  <strong style={{ fontSize: 15, color: '#163321' }}>{rfctlarrStages[currentStageIdx].name}</strong>
+                  <span className="badge-warning" style={{ fontSize: 11 }}>Timeline: {rfctlarrStages[currentStageIdx].timelineDays} Days SLA</span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: 12, color: '#334d3f', marginTop: 8 }}>
+                  <div><strong>Responsible Dept:</strong> {rfctlarrStages[currentStageIdx].department}</div>
+                  <div><strong>Responsible Role:</strong> {rfctlarrStages[currentStageIdx].actor}</div>
+                  <div><strong>Approval Authority:</strong> {rfctlarrStages[currentStageIdx].approvalAuthority}</div>
+                  <div>
+                    <strong>Allowed Transition:</strong>{' '}
+                    {currentStageIdx < rfctlarrStages.length - 1
+                      ? rfctlarrStages[currentStageIdx + 1].name
+                      : 'Project Archive / Mutation'}
+                  </div>
+                </div>
+                <div style={{ marginTop: 8, fontSize: 11, color: '#556e5e', borderTop: '1px dashed #cad7ca', paddingTop: 6 }}>
+                  <strong>Statutory Audit Requirement:</strong> {rfctlarrStages[currentStageIdx].auditRequirements}
                 </div>
               </div>
 
-              <div className="gate-checklist">
-                <label className="checklist-item">
-                  <input type="checkbox" defaultChecked />
-                  <span>Cadastral Joint Measurement Survey (JMS) verified by Revenue Officer</span>
-                </label>
-                <label className="checklist-item">
-                  <input type="checkbox" defaultChecked />
-                  <span>Statutory notification published in State Official Gazette</span>
-                </label>
-                <label className="checklist-item">
-                  <input type="checkbox" defaultChecked />
-                  <span>Section 15 Objections hearing concluded and formal orders recorded</span>
-                </label>
-                <label className="checklist-item">
-                  <input type="checkbox" defaultChecked />
-                  <span>100% Solatium + 12% Additional Market Value computed in Award Package</span>
-                </label>
+              <div style={{ marginTop: 14 }}>
+                <strong style={{ fontSize: 12, color: '#203b2c' }}>MANDATORY STATUTORY DOCUMENTS:</strong>
+                <div className="gate-checklist" style={{ marginTop: 6 }}>
+                  {rfctlarrStages[currentStageIdx].requiredDocs.map((doc) => (
+                    <label className="checklist-item" key={doc}>
+                      <input type="checkbox" defaultChecked />
+                      <span>{doc}</span>
+                    </label>
+                  ))}
+                </div>
               </div>
 
-              <div className="form-group">
+              <div className="form-group" style={{ marginTop: 12 }}>
                 <label>Digital Signature Certificate (DSC) Token</label>
                 <input
                   className="form-input"

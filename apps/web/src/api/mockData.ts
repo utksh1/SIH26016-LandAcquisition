@@ -1,17 +1,43 @@
-export type Role = 'Admin' | 'Collector' | 'Revenue Officer' | 'Land Owner'
+export type Role =
+  | 'Admin'
+  | 'Collector'
+  | 'Revenue Officer'
+  | 'Land Owner'
+  | 'Land Requiring Body'
+  | 'Additional Collector'
+  | 'GIS Officer'
+  | 'SIA Officer'
+  | 'Legal Officer'
+  | 'Finance Officer'
+  | 'Rehabilitation Officer'
+  | 'Government Reviewer'
 export type Language = 'en' | 'hi'
 
-/** The workflow values emitted by the Rust domain service. */
+/** The statutory 15 RFCTLARR workflow stages emitted by the Rust domain service. */
 export type ProjectStage =
+  | 'proposal_initiation'
+  | 'land_record_verification'
+  | 'sia_preparation'
+  | 'sia_review'
+  | 'preliminary_notification'
+  | 'objection_period'
+  | 'hearing'
+  | 'declaration'
+  | 'award_preparation'
+  | 'award_approval'
+  | 'compensation_calculation'
+  | 'payment_processing'
+  | 'possession'
+  | 'rr_completion'
+  | 'project_closure'
+  // Legacy aliases
   | 'draft'
   | 'sanctioned'
-  | 'preliminary_notification'
   | 'public_hearing'
   | 'survey'
   | 'compensation_award'
   | 'rr_scheme'
   | 'funds_disbursed'
-  | 'possession'
   | 'completed'
   | 'lapsed'
 
@@ -270,6 +296,170 @@ export const workflow: WorkflowStage[] = [
   { name: 'Compensation award', state: 'active', date: 'Due 18 Sep' },
   { name: 'R&R & disbursement', state: 'queued' },
   { name: 'Possession & handover', state: 'queued' },
+]
+
+export interface StatutoryStageMeta {
+  code: ProjectStage
+  name: string
+  department: string
+  role: string
+  timelineDays: number
+  approvalAuthority: string
+  requiredDocs: string[]
+  auditRequirements: string
+}
+
+export const statutoryWorkflowStages: StatutoryStageMeta[] = [
+  {
+    code: 'proposal_initiation',
+    name: 'Proposal Initiation',
+    department: 'Land Requiring Body',
+    role: 'Land Requiring Body',
+    timelineDays: 30,
+    approvalAuthority: 'Central/State Sanctioning Authority',
+    requiredDocs: ['dpr_feasibility_report', 'alignment_shapefile', 'village_survey_list', 'budget_sanction'],
+    auditRequirements: 'Project proposal logged with alignment geometry hash and budget sanction reference.',
+  },
+  {
+    code: 'land_record_verification',
+    name: 'Land Record Verification',
+    department: 'State Revenue Department',
+    role: 'Revenue Officer',
+    timelineDays: 30,
+    approvalAuthority: 'Sub-Divisional Officer (SDM)',
+    requiredDocs: ['cadastral_map', 'jamabandi_ror_extract', 'dilrmp_sync_record'],
+    auditRequirements: 'Cadastral land records verified against State DILRMP with ULPIN and mutation status.',
+  },
+  {
+    code: 'sia_preparation',
+    name: 'SIA Preparation',
+    department: 'Social Impact Assessment Unit',
+    role: 'SIA Officer',
+    timelineDays: 60,
+    approvalAuthority: 'District Collector',
+    requiredDocs: ['sia_terms_of_reference', 'public_consultation_notice', 'census_agency_moa'],
+    auditRequirements: 'SIA public notice published in affected gram panchayats; baseline census initiated.',
+  },
+  {
+    code: 'sia_review',
+    name: 'SIA Review',
+    department: 'Social Impact Assessment Unit',
+    role: 'SIA Officer',
+    timelineDays: 60,
+    approvalAuthority: 'Independent Expert Group / State Govt',
+    requiredDocs: ['sia_study_report', 'social_impact_management_plan', 'expert_group_recommendation'],
+    auditRequirements: 'Independent Expert Group recommendations evaluated and approved by Appropriate Government.',
+  },
+  {
+    code: 'preliminary_notification',
+    name: 'Preliminary Notification (Sec 11)',
+    department: 'District Collectorate / CALA',
+    role: 'Collector',
+    timelineDays: 30,
+    approvalAuthority: 'District Collector / Official Gazette',
+    requiredDocs: ['section_11_notification_pdf', 'local_newspaper_cuttings', 'gram_sabha_resolution'],
+    auditRequirements: 'Section 11 Gazette Extraordinary published; land transaction freeze flag applied.',
+  },
+  {
+    code: 'objection_period',
+    name: 'Objection Period (Sec 15)',
+    department: 'Public Citizen Transparency Desk',
+    role: 'Land Owner',
+    timelineDays: 60,
+    approvalAuthority: 'District Collector & CALA',
+    requiredDocs: ['section_15_objection_petitions', 'ownership_proof_documents'],
+    auditRequirements: 'Statutory 60-day objection window opened; citizen claims recorded with ticket IDs.',
+  },
+  {
+    code: 'hearing',
+    name: 'Hearing & Disposal',
+    department: 'District Collectorate / CALA',
+    role: 'Collector',
+    timelineDays: 30,
+    approvalAuthority: 'District Collector',
+    requiredDocs: ['section_15_2_hearing_minutes', 'collector_disposal_order'],
+    auditRequirements: 'Section 15(2) personal hearings conducted; written disposal orders issued to objectors.',
+  },
+  {
+    code: 'declaration',
+    name: 'Declaration (Sec 19)',
+    department: 'Appropriate Government / Oversight',
+    role: 'Government Reviewer',
+    timelineDays: 30,
+    approvalAuthority: 'Appropriate Government',
+    requiredDocs: ['section_19_declaration_order', 'approved_rr_scheme_summary', 'fund_deposit_receipt'],
+    auditRequirements: 'Section 19 Declaration issued within statutory 12-month limit; R&R scheme summary gazetted.',
+  },
+  {
+    code: 'award_preparation',
+    name: 'Award Preparation (Sec 23)',
+    department: 'District Collectorate / CALA',
+    role: 'Legal Officer',
+    timelineDays: 60,
+    approvalAuthority: 'Collector & CALA',
+    requiredDocs: ['joint_measurement_survey_sheet', 'asset_tree_structure_valuation', 'circle_rate_schedule'],
+    auditRequirements: 'True market value determined under Sec 26; attachment valuations completed per Sec 29.',
+  },
+  {
+    code: 'award_approval',
+    name: 'Award Approval',
+    department: 'District Collectorate / CALA',
+    role: 'Additional Collector',
+    timelineDays: 30,
+    approvalAuthority: 'District Collector / Competent Authority',
+    requiredDocs: ['section_23_30_final_award_order', 'compensation_apportionment_statement'],
+    auditRequirements: 'Formal Section 23/30 award approved under Collector DSC signature with apportionment sheet.',
+  },
+  {
+    code: 'compensation_calculation',
+    name: 'Compensation Calculation',
+    department: 'Finance & PFMS Division',
+    role: 'Finance Officer',
+    timelineDays: 15,
+    approvalAuthority: 'Controller of Accounts',
+    requiredDocs: ['market_value_computation_sheet', 'solatium_100_percent_audit_sheet', 'interest_accrual_statement'],
+    auditRequirements: 'First Schedule 100% Solatium computed and 12% p.a. additional interest accrued under Sec 30(3).',
+  },
+  {
+    code: 'payment_processing',
+    name: 'Payment Processing',
+    department: 'Finance & PFMS Division',
+    role: 'Finance Officer',
+    timelineDays: 30,
+    approvalAuthority: 'Finance Division / PFMS',
+    requiredDocs: ['pfms_sanction_order', 'dbt_payment_advice', 'bank_utr_acknowledgement'],
+    auditRequirements: 'Direct Benefit Transfer disbursed through PFMS with live UTR numbers recorded.',
+  },
+  {
+    code: 'possession',
+    name: 'Possession (Sec 38)',
+    department: 'District Collectorate / CALA',
+    role: 'Collector',
+    timelineDays: 30,
+    approvalAuthority: 'District Collector',
+    requiredDocs: ['possession_memo', 'panchnama_record', 'handover_certificate'],
+    auditRequirements: 'Physical possession taken under Sec 38 after compensation payment; encumbrances extinguished.',
+  },
+  {
+    code: 'rr_completion',
+    name: 'R&R Completion',
+    department: 'Resettlement & Rehabilitation Directorate',
+    role: 'Rehabilitation Officer',
+    timelineDays: 90,
+    approvalAuthority: 'R&R Commissioner',
+    requiredDocs: ['schedule_ii_entitlement_delivery_receipts', 'housing_allotment_deed', 'resettlement_site_clearance'],
+    auditRequirements: 'Resettlement housing grants and subsistence allowances delivered to all affected families.',
+  },
+  {
+    code: 'project_closure',
+    name: 'Project Closure',
+    department: 'Appropriate Government / Oversight',
+    role: 'Government Reviewer',
+    timelineDays: 15,
+    approvalAuthority: 'Central/State Ministry',
+    requiredDocs: ['revenue_title_mutation_order', 'final_audit_reconciliation_certificate', 'project_handover_sign_off'],
+    auditRequirements: 'Land mutated in government revenue records; final audit closed; project archived.',
+  },
 ]
 
 export const kpis = [

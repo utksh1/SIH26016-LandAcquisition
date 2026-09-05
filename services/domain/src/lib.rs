@@ -22,11 +22,18 @@ pub type StakeholderId = Uuid;
 #[serde(rename_all = "snake_case")]
 pub enum Role {
     Admin,
+    LandRequiringBody,
     Collector,
+    AdditionalCollector,
     RevenueOfficer,
+    GisOfficer,
+    SiaOfficer,
+    LegalOfficer,
+    FinanceOfficer,
+    RrOfficer,
+    GovernmentReviewer,
     LandOwner,
-    // Source-compatibility variants for the existing workflow/API crates. They
-    // are intentionally not serializable and must not be used for new data.
+    // Source-compatibility variants for existing workflow/API crates
     #[serde(skip)]
     CentralMinistryOfficial,
     #[serde(skip)]
@@ -42,8 +49,6 @@ pub enum Role {
     #[serde(skip)]
     FinanceController,
     #[serde(skip)]
-    LegalOfficer,
-    #[serde(skip)]
     PolicyMaker,
     #[serde(skip)]
     AuditOfficer,
@@ -57,16 +62,25 @@ impl Role {
             Self::Admin
             | Self::CentralMinistryOfficial
             | Self::ProjectImplementingAgency
-            | Self::FinanceController
-            | Self::LegalOfficer
             | Self::PolicyMaker
             | Self::AuditOfficer => "admin",
+            Self::LandRequiringBody => "land_requiring_body",
             Self::Collector
-            | Self::DistrictCollector
-            | Self::FieldSurveyor
-            | Self::RrAdministrator => "collector",
-            Self::RevenueOfficer | Self::StateRevenueDepartment => "revenue_officer",
-            Self::LandOwner | Self::CitizenSupportOfficer => "land_owner",
+            | Self::DistrictCollector => "collector",
+            Self::AdditionalCollector => "additional_collector",
+            Self::RevenueOfficer
+            | Self::StateRevenueDepartment
+            | Self::FieldSurveyor => "revenue_officer",
+            Self::GisOfficer => "gis_officer",
+            Self::SiaOfficer => "sia_officer",
+            Self::LegalOfficer => "legal_officer",
+            Self::FinanceOfficer
+            | Self::FinanceController => "finance_officer",
+            Self::RrOfficer
+            | Self::RrAdministrator => "rr_officer",
+            Self::GovernmentReviewer => "government_reviewer",
+            Self::LandOwner
+            | Self::CitizenSupportOfficer => "land_owner",
         }
     }
 
@@ -75,16 +89,25 @@ impl Role {
             Self::Admin
             | Self::CentralMinistryOfficial
             | Self::ProjectImplementingAgency
-            | Self::FinanceController
-            | Self::LegalOfficer
             | Self::PolicyMaker
             | Self::AuditOfficer => &ALL_PERMISSIONS,
+            Self::LandRequiringBody => &LAND_REQUIRING_BODY_PERMISSIONS,
             Self::Collector
-            | Self::DistrictCollector
-            | Self::FieldSurveyor
-            | Self::RrAdministrator => &COLLECTOR_PERMISSIONS,
-            Self::RevenueOfficer | Self::StateRevenueDepartment => &REVENUE_OFFICER_PERMISSIONS,
-            Self::LandOwner | Self::CitizenSupportOfficer => &LAND_OWNER_PERMISSIONS,
+            | Self::DistrictCollector => &COLLECTOR_PERMISSIONS,
+            Self::AdditionalCollector => &ADDITIONAL_COLLECTOR_PERMISSIONS,
+            Self::RevenueOfficer
+            | Self::StateRevenueDepartment
+            | Self::FieldSurveyor => &REVENUE_OFFICER_PERMISSIONS,
+            Self::GisOfficer => &GIS_OFFICER_PERMISSIONS,
+            Self::SiaOfficer => &SIA_OFFICER_PERMISSIONS,
+            Self::LegalOfficer => &LEGAL_OFFICER_PERMISSIONS,
+            Self::FinanceOfficer
+            | Self::FinanceController => &FINANCE_OFFICER_PERMISSIONS,
+            Self::RrOfficer
+            | Self::RrAdministrator => &RR_OFFICER_PERMISSIONS,
+            Self::GovernmentReviewer => &GOVERNMENT_REVIEWER_PERMISSIONS,
+            Self::LandOwner
+            | Self::CitizenSupportOfficer => &LAND_OWNER_PERMISSIONS,
         }
     }
 
@@ -220,6 +243,85 @@ const REVENUE_OFFICER_PERMISSIONS: [Permission; 9] = [
     Permission::UpdateStakeholders,
 ];
 
+const LAND_REQUIRING_BODY_PERMISSIONS: [Permission; 7] = [
+    Permission::ViewProjects,
+    Permission::CreateProjects,
+    Permission::UpdateProjects,
+    Permission::TransitionProjects,
+    Permission::ViewParcels,
+    Permission::CreateParcels,
+    Permission::ViewStakeholders,
+];
+
+const ADDITIONAL_COLLECTOR_PERMISSIONS: [Permission; 13] = [
+    Permission::ViewProjects,
+    Permission::CreateProjects,
+    Permission::UpdateProjects,
+    Permission::TransitionProjects,
+    Permission::ViewParcels,
+    Permission::CreateParcels,
+    Permission::UpdateParcels,
+    Permission::ViewOwners,
+    Permission::CreateOwners,
+    Permission::UpdateOwners,
+    Permission::ViewStakeholders,
+    Permission::CreateStakeholders,
+    Permission::UpdateStakeholders,
+];
+
+const GIS_OFFICER_PERMISSIONS: [Permission; 4] = [
+    Permission::ViewProjects,
+    Permission::ViewParcels,
+    Permission::CreateParcels,
+    Permission::UpdateParcels,
+];
+
+const SIA_OFFICER_PERMISSIONS: [Permission; 5] = [
+    Permission::ViewProjects,
+    Permission::UpdateProjects,
+    Permission::TransitionProjects,
+    Permission::ViewParcels,
+    Permission::ViewOwners,
+];
+
+const LEGAL_OFFICER_PERMISSIONS: [Permission; 6] = [
+    Permission::ViewProjects,
+    Permission::UpdateProjects,
+    Permission::ViewParcels,
+    Permission::ViewOwners,
+    Permission::ViewStakeholders,
+    Permission::SubmitGrievances,
+];
+
+const FINANCE_OFFICER_PERMISSIONS: [Permission; 6] = [
+    Permission::ViewProjects,
+    Permission::UpdateProjects,
+    Permission::TransitionProjects,
+    Permission::ViewParcels,
+    Permission::ViewOwners,
+    Permission::ViewAudit,
+];
+
+const RR_OFFICER_PERMISSIONS: [Permission; 7] = [
+    Permission::ViewProjects,
+    Permission::UpdateProjects,
+    Permission::TransitionProjects,
+    Permission::ViewParcels,
+    Permission::ViewOwners,
+    Permission::CreateOwners,
+    Permission::UpdateOwners,
+];
+
+const GOVERNMENT_REVIEWER_PERMISSIONS: [Permission; 7] = [
+    Permission::ViewProjects,
+    Permission::UpdateProjects,
+    Permission::TransitionProjects,
+    Permission::ViewParcels,
+    Permission::ViewOwners,
+    Permission::ViewStakeholders,
+    Permission::ViewAudit,
+];
+
 const LAND_OWNER_PERMISSIONS: [Permission; 4] = [
     Permission::ViewProjects,
     Permission::ViewParcels,
@@ -347,15 +449,31 @@ pub enum Authority {
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
 pub enum ProjectStage {
+    // 15 Canonical Legal Stages under RFCTLARR Act 2013
+    ProposalInitiation,
+    LandRecordVerification,
+    SiaPreparation,
+    SiaReview,
+    PreliminaryNotification,
+    ObjectionPeriod,
+    Hearing,
+    Declaration,
+    AwardPreparation,
+    AwardApproval,
+    CompensationCalculation,
+    PaymentProcessing,
+    Possession,
+    RrCompletion,
+    ProjectClosure,
+
+    // Legacy variants for backward compatibility
     Draft,
     Sanctioned,
-    PreliminaryNotification,
     PublicHearing,
     Survey,
     CompensationAward,
     RrScheme,
     FundsDisbursed,
-    Possession,
     Completed,
     Lapsed,
 }
@@ -371,22 +489,31 @@ impl Default for ProjectStage {
 impl ProjectStage {
     pub fn as_str(self) -> &'static str {
         match self {
-            Self::Draft => "draft",
+            Self::ProposalInitiation | Self::Draft => "proposal_initiation",
             Self::Sanctioned => "sanctioned",
+            Self::LandRecordVerification | Self::Survey => "land_record_verification",
+            Self::SiaPreparation => "sia_preparation",
+            Self::SiaReview => "sia_review",
             Self::PreliminaryNotification => "preliminary_notification",
-            Self::PublicHearing => "public_hearing",
-            Self::Survey => "survey",
-            Self::CompensationAward => "compensation_award",
-            Self::RrScheme => "rr_scheme",
-            Self::FundsDisbursed => "funds_disbursed",
+            Self::ObjectionPeriod | Self::PublicHearing => "objection_period",
+            Self::Hearing => "hearing",
+            Self::Declaration => "declaration",
+            Self::AwardPreparation => "award_preparation",
+            Self::AwardApproval | Self::CompensationAward => "award_approval",
+            Self::CompensationCalculation => "compensation_calculation",
+            Self::PaymentProcessing | Self::FundsDisbursed => "payment_processing",
             Self::Possession => "possession",
-            Self::Completed => "completed",
+            Self::RrCompletion | Self::RrScheme => "rr_completion",
+            Self::ProjectClosure | Self::Completed => "project_closure",
             Self::Lapsed => "lapsed",
         }
     }
 
     pub fn is_terminal(self) -> bool {
-        matches!(self, Self::Completed | Self::Lapsed)
+        matches!(
+            self,
+            Self::ProjectClosure | Self::Completed | Self::Lapsed
+        )
     }
 }
 
@@ -394,6 +521,44 @@ impl fmt::Display for ProjectStage {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str((*self).as_str())
     }
+}
+
+/// Statutory RFCTLARR Stage Specification
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct StageDefinition {
+    pub stage_code: String,
+    pub regime_code: String,
+    pub ordinal: u32,
+    pub stage_name: String,
+    pub department_code: String,
+    pub responsible_role: String,
+    pub approval_authority: String,
+    pub timeline_days: u32,
+    pub required_documents: Vec<String>,
+    pub allowed_transitions: Vec<String>,
+    pub audit_requirements: String,
+    pub gate_predicates: Vec<String>,
+    pub is_terminal: bool,
+}
+
+/// Statutory Department Definition
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DepartmentInfo {
+    pub code: String,
+    pub name: String,
+    pub mandate: String,
+    pub parent_authority: String,
+}
+
+/// Statutory Stakeholder Role Definition
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RoleInfo {
+    pub code: String,
+    pub name: String,
+    pub department_code: String,
+    pub tier: u8,
+    pub default_jurisdiction: String,
+    pub description: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]

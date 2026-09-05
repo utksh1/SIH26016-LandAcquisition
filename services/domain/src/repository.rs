@@ -457,41 +457,61 @@ impl PgOwnerRepository {
 
 fn map_db_status_to_stage(status: &str) -> ProjectStage {
     match status {
-        "draft" => ProjectStage::Draft,
-        "land_verification" => ProjectStage::Survey,
-        "notification" => ProjectStage::PreliminaryNotification,
-        "objection_period" => ProjectStage::PublicHearing,
-        "award_generation" => ProjectStage::CompensationAward,
-        "compensation" => ProjectStage::FundsDisbursed,
+        "proposal_initiation" | "draft" => ProjectStage::ProposalInitiation,
+        "land_record_verification" | "land_verification" => ProjectStage::LandRecordVerification,
+        "sia_preparation" => ProjectStage::SiaPreparation,
+        "sia_review" => ProjectStage::SiaReview,
+        "preliminary_notification" | "notification" => ProjectStage::PreliminaryNotification,
+        "objection_period" => ProjectStage::ObjectionPeriod,
+        "hearing" => ProjectStage::Hearing,
+        "declaration" => ProjectStage::Declaration,
+        "award_preparation" => ProjectStage::AwardPreparation,
+        "award_approval" | "award_generation" => ProjectStage::AwardApproval,
+        "compensation_calculation" => ProjectStage::CompensationCalculation,
+        "payment_processing" | "compensation" => ProjectStage::PaymentProcessing,
         "possession" => ProjectStage::Possession,
-        "completed" => ProjectStage::Completed,
+        "rr_completion" => ProjectStage::RrCompletion,
+        "project_closure" | "completed" => ProjectStage::ProjectClosure,
         "lapsed" => ProjectStage::Lapsed,
-        _ => ProjectStage::Draft,
+        _ => ProjectStage::ProposalInitiation,
     }
 }
 
 fn map_stage_to_db_status(stage: ProjectStage) -> &'static str {
     match stage {
-        ProjectStage::Draft => "draft",
-        ProjectStage::Sanctioned => "draft",
-        ProjectStage::PreliminaryNotification => "notification",
-        ProjectStage::PublicHearing => "objection_period",
-        ProjectStage::Survey => "land_verification",
-        ProjectStage::CompensationAward => "award_generation",
-        ProjectStage::RrScheme => "award_generation",
-        ProjectStage::FundsDisbursed => "compensation",
+        ProjectStage::ProposalInitiation | ProjectStage::Draft | ProjectStage::Sanctioned => "proposal_initiation",
+        ProjectStage::LandRecordVerification | ProjectStage::Survey => "land_record_verification",
+        ProjectStage::SiaPreparation => "sia_preparation",
+        ProjectStage::SiaReview => "sia_review",
+        ProjectStage::PreliminaryNotification => "preliminary_notification",
+        ProjectStage::ObjectionPeriod | ProjectStage::PublicHearing => "objection_period",
+        ProjectStage::Hearing => "hearing",
+        ProjectStage::Declaration => "declaration",
+        ProjectStage::AwardPreparation => "award_preparation",
+        ProjectStage::AwardApproval | ProjectStage::CompensationAward => "award_approval",
+        ProjectStage::CompensationCalculation => "compensation_calculation",
+        ProjectStage::PaymentProcessing | ProjectStage::FundsDisbursed => "payment_processing",
         ProjectStage::Possession => "possession",
-        ProjectStage::Completed => "completed",
+        ProjectStage::RrCompletion | ProjectStage::RrScheme => "rr_completion",
+        ProjectStage::ProjectClosure | ProjectStage::Completed => "project_closure",
         ProjectStage::Lapsed => "lapsed",
     }
 }
 
 fn map_db_role(role_code: &str) -> Role {
-    match role_code {
+    match role_code.to_lowercase().as_str() {
         "admin" => Role::Admin,
+        "land_requiring_body" | "requiring_body" => Role::LandRequiringBody,
         "collector" => Role::Collector,
+        "additional_collector" => Role::AdditionalCollector,
         "revenue_officer" => Role::RevenueOfficer,
-        "land_owner" => Role::LandOwner,
+        "gis_officer" | "gis" => Role::GisOfficer,
+        "sia_officer" | "sia" => Role::SiaOfficer,
+        "legal_officer" | "legal" => Role::LegalOfficer,
+        "finance_officer" | "finance" => Role::FinanceOfficer,
+        "rr_officer" | "rehabilitation_officer" => Role::RrOfficer,
+        "government_reviewer" | "government" => Role::GovernmentReviewer,
+        "land_owner" | "citizen" => Role::LandOwner,
         _ => Role::LandOwner,
     }
 }

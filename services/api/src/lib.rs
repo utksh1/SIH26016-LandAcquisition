@@ -207,6 +207,7 @@ impl InMemoryStore {
             updated_at: Utc::now(),
         };
         let w1_id = Uuid::from_u128(201);
+        let h1 = sih_workflow::who_handles_stage(&ProjectStage::Survey);
         let w1 = WorkflowInstance {
             id: w1_id,
             project_id: p1_id,
@@ -217,6 +218,9 @@ impl InMemoryStore {
             deadline_at: Some(Utc::now() + Duration::days(320)),
             completed_at: None,
             lapsed_at: None,
+            responsible_department: Some(h1.department_code.to_string()),
+            responsible_role: Some(h1.role_code.to_string()),
+            stage_timeline_days: Some(h1.timeline_days),
         };
         projects.insert(p1_id, p1);
         workflows.insert(w1_id, w1);
@@ -265,6 +269,7 @@ impl InMemoryStore {
             updated_at: Utc::now(),
         };
         let w2_id = Uuid::from_u128(202);
+        let h2 = sih_workflow::who_handles_stage(&ProjectStage::CompensationAward);
         let w2 = WorkflowInstance {
             id: w2_id,
             project_id: p2_id,
@@ -275,6 +280,9 @@ impl InMemoryStore {
             deadline_at: Some(Utc::now() + Duration::days(185)),
             completed_at: None,
             lapsed_at: None,
+            responsible_department: Some(h2.department_code.to_string()),
+            responsible_role: Some(h2.role_code.to_string()),
+            stage_timeline_days: Some(h2.timeline_days),
         };
         projects.insert(p2_id, p2);
         workflows.insert(w2_id, w2);
@@ -300,6 +308,7 @@ impl InMemoryStore {
             updated_at: Utc::now(),
         };
         let w3_id = Uuid::from_u128(203);
+        let h3 = sih_workflow::who_handles_stage(&ProjectStage::PreliminaryNotification);
         let w3 = WorkflowInstance {
             id: w3_id,
             project_id: p3_id,
@@ -310,6 +319,9 @@ impl InMemoryStore {
             deadline_at: Some(Utc::now() + Duration::days(335)),
             completed_at: None,
             lapsed_at: None,
+            responsible_department: Some(h3.department_code.to_string()),
+            responsible_role: Some(h3.role_code.to_string()),
+            stage_timeline_days: Some(h3.timeline_days),
         };
         projects.insert(p3_id, p3);
         workflows.insert(w3_id, w3);
@@ -455,6 +467,61 @@ impl InMemoryStore {
                 designation: "Rehabilitation Officer".to_string(),
                 department: "R&R Department".to_string(),
                 role: "REHABILITATION_OFFICER".to_string(),
+            },
+        );
+        ehrms_employees.insert(
+            "EMP006".to_string(),
+            EhrmsEmployee {
+                id: "00000000-0000-0000-0000-000000000006".to_string(),
+                employee_id: "EMP006".to_string(),
+                name: "Praveen Singhal".to_string(),
+                designation: "Chief Project Officer".to_string(),
+                department: "Land Requiring Body (NHAI)".to_string(),
+                role: "LAND_REQUIRING_BODY".to_string(),
+            },
+        );
+        ehrms_employees.insert(
+            "EMP007".to_string(),
+            EhrmsEmployee {
+                id: "00000000-0000-0000-0000-000000000007".to_string(),
+                employee_id: "EMP007".to_string(),
+                name: "Dr. Arvinder Roy".to_string(),
+                designation: "SIA Officer".to_string(),
+                department: "Social Impact Assessment Unit".to_string(),
+                role: "SIA_OFFICER".to_string(),
+            },
+        );
+        ehrms_employees.insert(
+            "EMP008".to_string(),
+            EhrmsEmployee {
+                id: "00000000-0000-0000-0000-000000000008".to_string(),
+                employee_id: "EMP008".to_string(),
+                name: "Harish Meena".to_string(),
+                designation: "Additional Collector".to_string(),
+                department: "District Collectorate / CALA".to_string(),
+                role: "ADDITIONAL_COLLECTOR".to_string(),
+            },
+        );
+        ehrms_employees.insert(
+            "EMP009".to_string(),
+            EhrmsEmployee {
+                id: "00000000-0000-0000-0000-000000000009".to_string(),
+                employee_id: "EMP009".to_string(),
+                name: "Adv. Madhav Joshi".to_string(),
+                designation: "Legal Officer".to_string(),
+                department: "Legal & Litigation Cell".to_string(),
+                role: "LEGAL_OFFICER".to_string(),
+            },
+        );
+        ehrms_employees.insert(
+            "EMP010".to_string(),
+            EhrmsEmployee {
+                id: "00000000-0000-0000-0000-000000000010".to_string(),
+                employee_id: "EMP010".to_string(),
+                name: "Meenakshi Sundaram".to_string(),
+                designation: "Joint Secretary / Reviewer".to_string(),
+                department: "Appropriate Government / Oversight".to_string(),
+                role: "GOVERNMENT_REVIEWER".to_string(),
             },
         );
 
@@ -707,6 +774,9 @@ pub fn app(state: AppState) -> Router {
         .route("/audit/trail", get(get_audit_trail))
         .route("/audit/verify", get(verify_audit))
         .route("/workflow/regimes", get(list_workflow_regimes))
+        .route("/workflow/stages", get(list_workflow_stages))
+        .route("/workflow/stages/:code", get(get_workflow_stage_by_code))
+        .route("/workflow/stakeholders", get(list_workflow_stakeholders))
         .route("/departments", get(list_departments))
         .route("/objections", post(submit_objection))
         .route("/objections/project/:id", get(list_project_objections))
@@ -993,16 +1063,21 @@ async fn create_project(
     let mut in_mem = state.in_memory.write().unwrap();
     in_mem.projects.insert(project.id, project.clone());
     let w_id = Uuid::new_v4();
+    let init_handler = sih_workflow::who_handles_stage(&ProjectStage::ProposalInitiation);
+    let init_deadline = Some(Utc::now() + chrono::Duration::days(init_handler.timeline_days as i64));
     let workflow = WorkflowInstance {
         id: w_id,
         project_id: project.id,
         authority: project.authority,
-        current_stage: ProjectStage::Draft,
+        current_stage: ProjectStage::ProposalInitiation,
         started_at: Utc::now(),
         notification_at: None,
-        deadline_at: None,
+        deadline_at: init_deadline,
         completed_at: None,
         lapsed_at: None,
+        responsible_department: Some(init_handler.department_code.to_string()),
+        responsible_role: Some(init_handler.role_code.to_string()),
+        stage_timeline_days: Some(init_handler.timeline_days),
     };
     in_mem.workflows.insert(w_id, workflow);
     in_mem.project_to_workflow.insert(project.id, w_id);
@@ -1236,16 +1311,24 @@ async fn start_workflow(
     }
 
     let w_id = Uuid::new_v4();
+    let initial_stage = ProjectStage::ProposalInitiation;
+    let handler = sih_workflow::who_handles_stage(&initial_stage);
+    let now = Utc::now();
+    let deadline = Some(now + chrono::Duration::days(handler.timeline_days as i64));
+
     let instance = WorkflowInstance {
         id: w_id,
         project_id,
         authority: project.authority,
-        current_stage: ProjectStage::Draft,
-        started_at: Utc::now(),
+        current_stage: initial_stage,
+        started_at: now,
         notification_at: None,
-        deadline_at: None,
+        deadline_at: deadline,
         completed_at: None,
         lapsed_at: None,
+        responsible_department: Some(handler.department_code.to_string()),
+        responsible_role: Some(handler.role_code.to_string()),
+        stage_timeline_days: Some(handler.timeline_days),
     };
     in_mem.workflows.insert(w_id, instance.clone());
     in_mem.project_to_workflow.insert(project_id, w_id);
@@ -1264,7 +1347,7 @@ async fn advance_workflow_endpoint(
     require_permission(&actor, Permission::TransitionProjects)?;
 
     let mut in_mem = state.in_memory.write().unwrap();
-    let (instance_clone, from, to, project_id) = {
+    let (instance_clone, from, to, project_id, next_handler) = {
         let instance = in_mem
             .workflows
             .get_mut(&workflow_id)
@@ -1272,13 +1355,35 @@ async fn advance_workflow_endpoint(
 
         let from = instance.current_stage;
         let to = request.to;
+        let next_handler = sih_workflow::who_handles_stage(&to);
+        let now = Utc::now();
+        let stage_deadline = Some(now + chrono::Duration::days(next_handler.timeline_days as i64));
+
         instance.current_stage = to;
-        (instance.clone(), from, to, instance.project_id)
+        instance.deadline_at = stage_deadline;
+        instance.responsible_department = Some(next_handler.department_code.to_string());
+        instance.responsible_role = Some(next_handler.role_code.to_string());
+        instance.stage_timeline_days = Some(next_handler.timeline_days);
+
+        if to == ProjectStage::PreliminaryNotification {
+            instance.notification_at = Some(now);
+        }
+        if to == ProjectStage::ProjectClosure || to == ProjectStage::Completed {
+            instance.completed_at = Some(now);
+        }
+        if to == ProjectStage::Lapsed {
+            instance.lapsed_at = Some(now);
+        }
+
+        (instance.clone(), from, to, instance.project_id, next_handler)
     };
 
     if let Some(p) = in_mem.projects.get_mut(&project_id) {
         p.stage = to;
         p.updated_at = Utc::now();
+        if to == ProjectStage::PreliminaryNotification {
+            p.preliminary_notification_at = Some(Utc::now());
+        }
     }
 
     let action = ApprovalAction {
@@ -1309,7 +1414,14 @@ async fn advance_workflow_endpoint(
         actor.id,
         "WORKFLOW_ADVANCE",
         format!("workflow/{}", workflow_id),
-        json!({"from": format!("{:?}", from), "to": format!("{:?}", to)}),
+        json!({
+            "from": format!("{:?}", from),
+            "to": format!("{:?}", to),
+            "department": next_handler.department_code,
+            "role": next_handler.role_code,
+            "timeline_days": next_handler.timeline_days,
+            "approval_authority": next_handler.approval_authority,
+        }),
         prev_hash,
     );
     in_mem.audit_log.push(entry);
@@ -1702,14 +1814,21 @@ async fn verify_audit(State(state): State<AppState>) -> Json<Value> {
 
 async fn list_workflow_regimes() -> Json<Vec<WorkflowRegimeDefinition>> {
     let mut rfctlarr_dept = HashMap::new();
-    rfctlarr_dept.insert("Proposal".to_string(), vec!["Land Requiring Body".to_string()]);
-    rfctlarr_dept.insert("Verification".to_string(), vec!["Revenue Department".to_string(), "GIS Department".to_string()]);
-    rfctlarr_dept.insert("SIA".to_string(), vec!["Collector".to_string(), "SIA Team".to_string()]);
-    rfctlarr_dept.insert("Notification".to_string(), vec!["Collector".to_string()]);
-    rfctlarr_dept.insert("Objection".to_string(), vec!["Land Owner".to_string(), "Collector".to_string()]);
-    rfctlarr_dept.insert("Award".to_string(), vec!["Collector".to_string(), "Finance Department".to_string()]);
-    rfctlarr_dept.insert("Payment".to_string(), vec!["Finance Department".to_string()]);
-    rfctlarr_dept.insert("Possession".to_string(), vec!["Collector".to_string(), "Rehabilitation Department".to_string()]);
+    rfctlarr_dept.insert("Proposal Initiation".to_string(), vec!["Land Requiring Body".to_string()]);
+    rfctlarr_dept.insert("Land Record Verification".to_string(), vec!["State Revenue Department".to_string(), "Survey & Geo-informatics Wing".to_string()]);
+    rfctlarr_dept.insert("SIA Preparation".to_string(), vec!["Social Impact Assessment Unit".to_string()]);
+    rfctlarr_dept.insert("SIA Review".to_string(), vec!["Social Impact Assessment Unit".to_string(), "Independent Expert Group".to_string()]);
+    rfctlarr_dept.insert("Preliminary Notification (Sec 11)".to_string(), vec!["District Collectorate / CALA".to_string()]);
+    rfctlarr_dept.insert("Objection Period (Sec 15)".to_string(), vec!["Public Citizen Transparency Desk".to_string(), "Land Owner".to_string()]);
+    rfctlarr_dept.insert("Hearing & Disposal".to_string(), vec!["District Collectorate / CALA".to_string()]);
+    rfctlarr_dept.insert("Declaration (Sec 19)".to_string(), vec!["Appropriate Government / Oversight".to_string()]);
+    rfctlarr_dept.insert("Award Preparation (Sec 23)".to_string(), vec!["District Collectorate / CALA".to_string(), "Legal & Litigation Cell".to_string()]);
+    rfctlarr_dept.insert("Award Approval".to_string(), vec!["District Collectorate / CALA".to_string()]);
+    rfctlarr_dept.insert("Compensation Calculation".to_string(), vec!["Finance & PFMS Division".to_string()]);
+    rfctlarr_dept.insert("Payment Processing".to_string(), vec!["Finance & PFMS Division".to_string()]);
+    rfctlarr_dept.insert("Possession (Sec 38)".to_string(), vec!["District Collectorate / CALA".to_string()]);
+    rfctlarr_dept.insert("R&R Completion".to_string(), vec!["Resettlement & Rehabilitation Directorate".to_string()]);
+    rfctlarr_dept.insert("Project Closure".to_string(), vec!["Appropriate Government / Oversight".to_string()]);
 
     let mut nh_dept = HashMap::new();
     nh_dept.insert("Project Created".to_string(), vec!["NHAI".to_string()]);
@@ -1739,24 +1858,34 @@ async fn list_workflow_regimes() -> Json<Vec<WorkflowRegimeDefinition>> {
     Json(vec![
         WorkflowRegimeDefinition {
             id: "rfctlarr_2013".to_string(),
-            name: "RFCTLARR Act 2013 (Right to Fair Compensation)".to_string(),
+            name: "RFCTLARR Act 2013 (Right to Fair Compensation & Transparency)".to_string(),
             authority: "larr".to_string(),
             stages: vec![
-                "Proposal".to_string(),
-                "Verification".to_string(),
-                "SIA".to_string(),
-                "Notification".to_string(),
-                "Objection".to_string(),
-                "Award".to_string(),
-                "Payment".to_string(),
-                "Possession".to_string(),
+                "Proposal Initiation".to_string(),
+                "Land Record Verification".to_string(),
+                "SIA Preparation".to_string(),
+                "SIA Review".to_string(),
+                "Preliminary Notification (Sec 11)".to_string(),
+                "Objection Period (Sec 15)".to_string(),
+                "Hearing & Disposal".to_string(),
+                "Declaration (Sec 19)".to_string(),
+                "Award Preparation (Sec 23)".to_string(),
+                "Award Approval".to_string(),
+                "Compensation Calculation".to_string(),
+                "Payment Processing".to_string(),
+                "Possession (Sec 38)".to_string(),
+                "R&R Completion".to_string(),
+                "Project Closure".to_string(),
             ],
             department_mapping: rfctlarr_dept,
             rules: vec![
-                "Mandatory Social Impact Assessment (SIA) within 6 months".to_string(),
-                "Consent threshold: 70% for PPP, 80% for private companies".to_string(),
-                "Solatium: 100% on market value".to_string(),
-                "R&R award mandatory before taking possession".to_string(),
+                "Section 11 Preliminary Notification freeze on land transactions".to_string(),
+                "Section 15 statutory 60-day objection filing window".to_string(),
+                "Section 19 Declaration mandatory within 12 months of Section 11 notice (lapse prevention)".to_string(),
+                "Section 23/26 determination of true market value & 100% Solatium under First Schedule".to_string(),
+                "Section 30(3) 12% per annum additional interest accrual from notification to award".to_string(),
+                "Section 38 possession only after full compensation deposit/disbursement".to_string(),
+                "Second Schedule mandatory R&R entitlements delivery prior to closure".to_string(),
             ],
         },
         WorkflowRegimeDefinition {
@@ -1817,6 +1946,34 @@ async fn list_workflow_regimes() -> Json<Vec<WorkflowRegimeDefinition>> {
             ],
         },
     ])
+}
+
+async fn list_workflow_stages() -> Json<Vec<sih_domain::StageDefinition>> {
+    Json(sih_workflow::get_all_stage_definitions())
+}
+
+async fn get_workflow_stage_by_code(
+    Path(stage_code): Path<String>,
+) -> Result<Json<sih_domain::StageDefinition>, ApiError> {
+    let stages = sih_workflow::get_all_stage_definitions();
+    let stage = stages
+        .into_iter()
+        .find(|s| s.stage_code.eq_ignore_ascii_case(&stage_code))
+        .ok_or_else(|| ApiError::NotFound(format!("Workflow stage '{}' not found", stage_code)))?;
+    Ok(Json(stage))
+}
+
+#[derive(Serialize)]
+struct StakeholderRegistryResponse {
+    departments: Vec<sih_domain::DepartmentInfo>,
+    roles: Vec<sih_domain::RoleInfo>,
+}
+
+async fn list_workflow_stakeholders() -> Json<StakeholderRegistryResponse> {
+    Json(StakeholderRegistryResponse {
+        departments: sih_workflow::list_statutory_departments(),
+        roles: sih_workflow::list_statutory_roles(),
+    })
 }
 
 async fn list_departments() -> Json<Vec<DepartmentDefinition>> {
@@ -2103,7 +2260,7 @@ async fn mock_ehrms_login(
         }))
     } else {
         Err(ApiError::NotFound(format!(
-            "Employee ID '{}' not found in eHRMS registry. Valid demo IDs: EMP001 to EMP005",
+            "Employee ID '{}' not found in eHRMS registry. Valid demo IDs: EMP001 to EMP010",
             payload.employee_id
         )))
     }
@@ -2146,7 +2303,18 @@ async fn visible_projects(actor: &Actor, state: &AppState) -> Result<Vec<Project
 fn is_supported_role(role: Role) -> bool {
     matches!(
         role,
-        Role::Admin | Role::Collector | Role::RevenueOfficer | Role::LandOwner
+        Role::Admin
+            | Role::LandRequiringBody
+            | Role::Collector
+            | Role::AdditionalCollector
+            | Role::RevenueOfficer
+            | Role::GisOfficer
+            | Role::SiaOfficer
+            | Role::LegalOfficer
+            | Role::FinanceOfficer
+            | Role::RrOfficer
+            | Role::GovernmentReviewer
+            | Role::LandOwner
     )
 }
 
@@ -2162,9 +2330,10 @@ fn require_permission(actor: &Actor, permission: Permission) -> Result<(), ApiEr
 
 fn authorize_create(actor: &Actor, state_code: &str, district_code: &str) -> Result<(), ApiError> {
     let allowed = match (&actor.role, &actor.jurisdiction) {
-        (Role::Admin, Jurisdiction::National) => true,
+        (Role::Admin | Role::LandRequiringBody | Role::GovernmentReviewer, Jurisdiction::National) => true,
+        (Role::LandRequiringBody, _) => true,
         (Role::RevenueOfficer, Jurisdiction::State { code }) => code == state_code,
-        (Role::Collector, Jurisdiction::District { code }) => code == district_code,
+        (Role::Collector | Role::AdditionalCollector, Jurisdiction::District { code }) => code == district_code,
         (
             Role::Collector,
             Jurisdiction::Field {
@@ -2172,7 +2341,7 @@ fn authorize_create(actor: &Actor, state_code: &str, district_code: &str) -> Res
             },
         ) => code == district_code,
         (Role::LandOwner, Jurisdiction::Public) => false,
-        _ => false,
+        _ => actor.role != Role::LandOwner,
     };
     if !allowed {
         return Err(ApiError::Forbidden(
@@ -2184,14 +2353,23 @@ fn authorize_create(actor: &Actor, state_code: &str, district_code: &str) -> Res
 
 fn jurisdiction_matches(actor: &Actor, project: &Project) -> bool {
     match (&actor.role, &actor.jurisdiction) {
-        (Role::Admin, Jurisdiction::National) => true,
+        (Role::Admin | Role::LandRequiringBody | Role::GovernmentReviewer, Jurisdiction::National) => true,
         (Role::RevenueOfficer, Jurisdiction::State { code }) => code == &project.state_code,
-        (Role::Collector, Jurisdiction::District { code }) => code == &project.district_code,
-        (Role::Collector, Jurisdiction::Field { district_code }) => {
+        (
+            Role::Collector
+            | Role::AdditionalCollector
+            | Role::GisOfficer
+            | Role::SiaOfficer
+            | Role::LegalOfficer
+            | Role::FinanceOfficer
+            | Role::RrOfficer,
+            Jurisdiction::District { code },
+        ) => code == &project.district_code,
+        (Role::Collector | Role::RevenueOfficer, Jurisdiction::Field { district_code }) => {
             district_code == &project.district_code
         }
         (Role::LandOwner, Jurisdiction::Public) => true,
-        _ => false,
+        _ => true,
     }
 }
 
@@ -2208,19 +2386,49 @@ fn authorize_project_access(actor: &Actor, project: &Project) -> Result<(), ApiE
 pub fn authorize_transition(actor: &Actor, target: &ProjectStage) -> Result<(), ApiError> {
     require_permission(actor, Permission::TransitionProjects)?;
     let role_allowed = match (&actor.role, target) {
+        (Role::Admin | Role::Collector, _) => true,
         (
-            Role::Admin,
-            ProjectStage::Sanctioned | ProjectStage::FundsDisbursed | ProjectStage::Completed,
+            Role::LandRequiringBody,
+            ProjectStage::ProposalInitiation
+                | ProjectStage::LandRecordVerification
+                | ProjectStage::Draft
+                | ProjectStage::Sanctioned,
         ) => true,
-        (Role::RevenueOfficer, ProjectStage::Sanctioned) => true,
         (
-            Role::Collector,
-            ProjectStage::PreliminaryNotification
-                | ProjectStage::PublicHearing
-                | ProjectStage::CompensationAward
-                | ProjectStage::Possession
-                | ProjectStage::Survey
-                | ProjectStage::RrScheme
+            Role::RevenueOfficer,
+            ProjectStage::LandRecordVerification
+                | ProjectStage::SiaPreparation
+                | ProjectStage::Sanctioned,
+        ) => true,
+        (
+            Role::GisOfficer,
+            ProjectStage::LandRecordVerification | ProjectStage::Survey,
+        ) => true,
+        (
+            Role::SiaOfficer,
+            ProjectStage::SiaPreparation
+                | ProjectStage::SiaReview
+                | ProjectStage::PreliminaryNotification,
+        ) => true,
+        (
+            Role::AdditionalCollector,
+            ProjectStage::AwardPreparation
+                | ProjectStage::AwardApproval
+                | ProjectStage::CompensationCalculation
+                | ProjectStage::CompensationAward,
+        ) => true,
+        (Role::LegalOfficer, ProjectStage::Hearing | ProjectStage::AwardPreparation) => true,
+        (
+            Role::FinanceOfficer,
+            ProjectStage::CompensationCalculation
+                | ProjectStage::PaymentProcessing
+                | ProjectStage::FundsDisbursed,
+        ) => true,
+        (Role::RrOfficer, ProjectStage::RrCompletion | ProjectStage::RrScheme) => true,
+        (
+            Role::GovernmentReviewer,
+            ProjectStage::Declaration
+                | ProjectStage::ProjectClosure
                 | ProjectStage::Completed,
         ) => true,
         (Role::LandOwner, _) => false,
@@ -2255,13 +2463,26 @@ pub fn authorize_transition_for_project(
 }
 
 fn valid_transition_jurisdiction(actor: &Actor) -> bool {
-    matches!(
-        (&actor.role, &actor.jurisdiction),
-        (Role::Admin, Jurisdiction::National)
-            | (Role::RevenueOfficer, Jurisdiction::State { .. })
-            | (Role::Collector, Jurisdiction::District { .. })
-            | (Role::Collector, Jurisdiction::Field { .. })
-    )
+    match (&actor.role, &actor.jurisdiction) {
+        (
+            Role::Admin | Role::LandRequiringBody | Role::GovernmentReviewer,
+            Jurisdiction::National,
+        ) => true,
+        (Role::RevenueOfficer, Jurisdiction::State { .. }) => true,
+        (
+            Role::Collector
+            | Role::AdditionalCollector
+            | Role::GisOfficer
+            | Role::SiaOfficer
+            | Role::LegalOfficer
+            | Role::FinanceOfficer
+            | Role::RrOfficer,
+            Jurisdiction::District { .. },
+        ) => true,
+        (Role::Collector | Role::RevenueOfficer, Jurisdiction::Field { .. }) => true,
+        (Role::LandOwner, Jurisdiction::Public) => false,
+        _ => true,
+    }
 }
 
 fn hmac_sha256(secret: &[u8], message: &[u8]) -> [u8; 32] {
@@ -2361,7 +2582,7 @@ mod tests {
     #[test]
     fn test_ehrms_employees_seeded() {
         let store = InMemoryStore::seeded();
-        assert_eq!(store.ehrms_employees.len(), 5);
+        assert_eq!(store.ehrms_employees.len(), 10);
 
         let collector = store.ehrms_employees.get("EMP001").unwrap();
         assert_eq!(collector.name, "Raj Sharma");
@@ -2383,6 +2604,37 @@ mod tests {
         let rehab = store.ehrms_employees.get("EMP005").unwrap();
         assert_eq!(rehab.name, "Suresh Patel");
         assert_eq!(rehab.role, "REHABILITATION_OFFICER");
+
+        let req = store.ehrms_employees.get("EMP006").unwrap();
+        assert_eq!(req.name, "Praveen Singhal");
+        assert_eq!(req.role, "LAND_REQUIRING_BODY");
+
+        let sia = store.ehrms_employees.get("EMP007").unwrap();
+        assert_eq!(sia.name, "Dr. Arvinder Roy");
+        assert_eq!(sia.role, "SIA_OFFICER");
+
+        let legal = store.ehrms_employees.get("EMP009").unwrap();
+        assert_eq!(legal.name, "Adv. Madhav Joshi");
+        assert_eq!(legal.role, "LEGAL_OFFICER");
+
+        let gov = store.ehrms_employees.get("EMP010").unwrap();
+        assert_eq!(gov.name, "Meenakshi Sundaram");
+        assert_eq!(gov.role, "GOVERNMENT_REVIEWER");
+    }
+
+    #[test]
+    fn test_statutory_workflow_stages_seeded() {
+        let stages = sih_workflow::get_all_stage_definitions();
+        assert_eq!(stages.len(), 15);
+        assert_eq!(stages[0].stage_code, "proposal_initiation");
+        assert_eq!(stages[14].stage_code, "project_closure");
+        assert!(stages[14].is_terminal);
+
+        let depts = sih_workflow::list_statutory_departments();
+        assert_eq!(depts.len(), 10);
+
+        let roles = sih_workflow::list_statutory_roles();
+        assert_eq!(roles.len(), 11);
     }
 }
 

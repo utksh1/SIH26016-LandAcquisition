@@ -23,6 +23,7 @@ import {
   type ProjectStage,
   type Role,
   type TransitionRequest,
+  statutoryWorkflowStages,
 } from './mockData'
 
 export interface MapParcelFeature {
@@ -99,6 +100,30 @@ export interface DepartmentInfo {
   default_role: string
 }
 
+export interface StageDefinition {
+  code: string
+  name: string
+  responsible_department: string
+  responsible_role: string
+  timeline_days: number
+  required_documents: string[]
+  approval_authority: string
+  allowed_transitions: string[]
+  audit_requirements: string[]
+}
+
+export interface WorkflowRoleInfo {
+  code: string
+  name: string
+  department_code: string
+  description: string
+}
+
+export interface WorkflowStakeholdersResponse {
+  departments: DepartmentInfo[]
+  roles: WorkflowRoleInfo[]
+}
+
 export interface ObjectionItem {
   id: string
   project_id: string
@@ -138,7 +163,7 @@ export interface EhrmsEmployee {
   name: string
   designation: string
   department: string
-  role: 'COLLECTOR' | 'REVENUE_OFFICER' | 'GIS_OFFICER' | 'FINANCE_OFFICER' | 'REHABILITATION_OFFICER' | string
+  role: string
 }
 
 export interface MockEhrmsLoginResponse {
@@ -186,6 +211,46 @@ export const demoEhrmsEmployees: EhrmsEmployee[] = [
     designation: 'Rehabilitation Officer',
     department: 'R&R Department',
     role: 'REHABILITATION_OFFICER',
+  },
+  {
+    id: '00000000-0000-0000-0000-000000000006',
+    employee_id: 'EMP006',
+    name: 'Vikram Verma',
+    designation: 'Project Director',
+    department: 'Requiring Body (NHAI)',
+    role: 'REQUIRING_BODY',
+  },
+  {
+    id: '00000000-0000-0000-0000-000000000007',
+    employee_id: 'EMP007',
+    name: 'Dr. Sunita Rao',
+    designation: 'SIA Lead Officer',
+    department: 'Social Impact Assessment Unit',
+    role: 'SIA_OFFICER',
+  },
+  {
+    id: '00000000-0000-0000-0000-000000000008',
+    employee_id: 'EMP008',
+    name: 'Adv. Rajesh Khanna',
+    designation: 'Chief Legal Advisor',
+    department: 'Legal & Land Affairs',
+    role: 'LEGAL_OFFICER',
+  },
+  {
+    id: '00000000-0000-0000-0000-000000000009',
+    employee_id: 'EMP009',
+    name: 'Priya Menon',
+    designation: 'Additional Collector',
+    department: 'Land Acquisition Authority',
+    role: 'ADDITIONAL_COLLECTOR',
+  },
+  {
+    id: '00000000-0000-0000-0000-000000000010',
+    employee_id: 'EMP010',
+    name: 'Dr. Aarav Sharma',
+    designation: 'Oversight Reviewer',
+    department: 'Ministry / Oversight Agency',
+    role: 'GOVERNMENT_REVIEWER',
   },
 ]
 
@@ -297,6 +362,9 @@ export interface ApiClient {
   listProjectDocuments(projectId: string): Promise<DocumentItem[]>
   mockEhrmsLogin(employeeId: string): Promise<MockEhrmsLoginResponse>
   listMockEhrmsEmployees(): Promise<EhrmsEmployee[]>
+  listWorkflowStages(): Promise<StageDefinition[]>
+  getWorkflowStage(code: string): Promise<StageDefinition>
+  getWorkflowStakeholders(): Promise<WorkflowStakeholdersResponse>
 }
 
 const defaultBaseUrl = 'http://localhost:3000'
@@ -330,6 +398,9 @@ export const apiPaths = {
   workflowReject: (workflowId: string) => `/workflow/${encodeURIComponent(workflowId)}/reject`,
   workflowHistory: (workflowId: string) => `/workflow/${encodeURIComponent(workflowId)}/history`,
   workflowRegimes: '/workflow/regimes',
+  workflowStages: '/workflow/stages',
+  workflowStage: (code: string) => `/workflow/stages/${encodeURIComponent(code)}`,
+  workflowStakeholders: '/workflow/stakeholders',
   departments: '/departments',
   objections: '/objections',
   projectObjections: (projectId: string) => `/objections/project/${encodeURIComponent(projectId)}`,
@@ -518,6 +589,70 @@ const mockResponse = async <T>(method: string, path: string, body?: unknown): Pr
     return clone(project) as T
   }
 
+  if (method === 'GET' && normalizedPath === apiPaths.workflowStages) {
+    return clone(
+      statutoryWorkflowStages.map((s) => ({
+        code: s.code,
+        name: s.name,
+        responsible_department: s.department,
+        responsible_role: s.role,
+        timeline_days: s.timelineDays,
+        required_documents: s.requiredDocs,
+        approval_authority: s.approvalAuthority,
+        allowed_transitions: [],
+        audit_requirements: [s.auditRequirements],
+      })),
+    ) as T
+  }
+
+  if (method === 'GET' && normalizedPath.startsWith('/workflow/stages/')) {
+    const code = normalizedPath.replace('/workflow/stages/', '')
+    const s = statutoryWorkflowStages.find((x) => x.code === code)
+    if (s) {
+      return clone({
+        code: s.code,
+        name: s.name,
+        responsible_department: s.department,
+        responsible_role: s.role,
+        timeline_days: s.timelineDays,
+        required_documents: s.requiredDocs,
+        approval_authority: s.approvalAuthority,
+        allowed_transitions: [],
+        audit_requirements: [s.auditRequirements],
+      }) as T
+    }
+  }
+
+  if (method === 'GET' && normalizedPath === apiPaths.workflowStakeholders) {
+    return clone({
+      departments: [
+        { code: 'NHAI', name: 'Land Requiring Body (NHAI / PWD)', responsible_modules: ['Proposal'], default_role: 'Land Requiring Body' },
+        { code: 'REV', name: 'State Revenue Department', responsible_modules: ['Verification'], default_role: 'Revenue Officer' },
+        { code: 'SIA', name: 'Social Impact Assessment Unit', responsible_modules: ['SIA'], default_role: 'SIA Officer' },
+        { code: 'CALA', name: 'District Collectorate / CALA', responsible_modules: ['Notifications', 'Hearings', 'Awards'], default_role: 'Collector' },
+        { code: 'CITIZEN', name: 'Public Grievance Desk', responsible_modules: ['Objections'], default_role: 'Land Owner' },
+        { code: 'FIN', name: 'Finance & Accounts / PFMS', responsible_modules: ['Compensation', 'Disbursements'], default_role: 'Finance Officer' },
+        { code: 'RR', name: 'Rehabilitation & Resettlement', responsible_modules: ['R&R'], default_role: 'Rehabilitation Officer' },
+        { code: 'OVERSIGHT', name: 'Cabinet / Ministry Oversight', responsible_modules: ['Declaration', 'Closure'], default_role: 'Government Reviewer' },
+        { code: 'LEGAL', name: 'Legal Affairs Directorate', responsible_modules: ['Valuation', 'Award Review'], default_role: 'Legal Officer' },
+        { code: 'SURVEY', name: 'Cadastral Survey & Geoinformatics', responsible_modules: ['Demarcation'], default_role: 'GIS Officer' },
+      ],
+      roles: [
+        { code: 'Land Requiring Body', name: 'Land Requiring Body', department_code: 'NHAI', description: 'Submits DPR and acquisition proposal' },
+        { code: 'Collector', name: 'District Collector / CALA', department_code: 'CALA', description: 'Statutory authority under RFCTLARR Act 2013' },
+        { code: 'Additional Collector', name: 'Additional Collector', department_code: 'CALA', description: 'Assists CALA in award scrutiny and hearings' },
+        { code: 'Revenue Officer', name: 'Revenue Officer / Tehsildar', department_code: 'REV', description: 'Validates land records and mutations' },
+        { code: 'GIS Officer', name: 'GIS Surveyor', department_code: 'SURVEY', description: 'Performs spatial demarcation and parcel mapping' },
+        { code: 'SIA Officer', name: 'SIA Unit Lead', department_code: 'SIA', description: 'Conducts social impact assessment study' },
+        { code: 'Legal Officer', name: 'Chief Legal Officer', department_code: 'LEGAL', description: 'Reviews legal compliance and draft awards' },
+        { code: 'Finance Officer', name: 'Finance Controller', department_code: 'FIN', description: 'Manages PFMS disbursements and solatium' },
+        { code: 'Rehabilitation Officer', name: 'R&R Administrator', department_code: 'RR', description: 'Oversees resettlement and rehabilitation' },
+        { code: 'Government Reviewer', name: 'Central / State Reviewer', department_code: 'OVERSIGHT', description: 'Conducts high-level oversight' },
+        { code: 'Land Owner', name: 'Affected Landowner', department_code: 'CITIZEN', description: 'Citizen viewing notices and filing objections' },
+      ],
+    }) as T
+  }
+
   return mockError(`${method} ${normalizedPath} is not available in mock mode`, normalizedPath, 501, 'mock_endpoint_unavailable')
 }
 
@@ -633,6 +768,9 @@ export const apiClient: ApiClient = {
     request<MockEhrmsLoginResponse>('POST', apiPaths.ehrmsLogin, { employee_id: employeeId }),
   listMockEhrmsEmployees: () =>
     request<EhrmsEmployee[]>('GET', apiPaths.ehrmsEmployees),
+  listWorkflowStages: () => request<StageDefinition[]>('GET', apiPaths.workflowStages),
+  getWorkflowStage: (code: string) => request<StageDefinition>('GET', apiPaths.workflowStage(code)),
+  getWorkflowStakeholders: () => request<WorkflowStakeholdersResponse>('GET', apiPaths.workflowStakeholders),
 }
 
 export const isApiConfigured = Boolean(activeBaseUrl)
