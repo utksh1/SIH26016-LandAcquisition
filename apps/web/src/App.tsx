@@ -839,6 +839,18 @@ export default function App() {
   const [currentStageIdx, setCurrentStageIdx] = useState(0)
   const [kpis, setKpis] = useState<DashboardKpi[]>([])
   const [notices, setNotices] = useState<AlertNotice[]>([])
+  const [showNoticesDropdown, setShowNoticesDropdown] = useState(false)
+
+  // Deduplicate notices from background sync to prevent repetitive alerts
+  const uniqueNotices = useMemo(() => {
+    const seen = new Set<string>()
+    return notices.filter((n) => {
+      const key = `${n.label}|${n.title}|${n.detail}`
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+  }, [notices])
   const [loading, setLoading] = useState(false)
   const [toastMessage, setToastMessage] = useState<string | null>(null)
   const [backendError, setBackendError] = useState(false)
@@ -2250,6 +2262,121 @@ export default function App() {
               ))}
             </select>
 
+            {/* Notification Bell with Badge & Dropdown */}
+            <div style={{ position: 'relative' }}>
+              <button
+                className="icon-button notification"
+                onClick={() => setShowNoticesDropdown(!showNoticesDropdown)}
+                title="Statutory SLA Notices & Alerts"
+                style={{
+                  cursor: 'pointer',
+                  border: '1px solid #ced6cb',
+                  background: showNoticesDropdown ? '#001e2b' : '#f4f6ee',
+                  color: showNoticesDropdown ? '#00ed64' : '#10251f',
+                  width: 34,
+                  height: 34,
+                  borderRadius: 6,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Icon name="bell" size={15} />
+                {uniqueNotices.length > 0 && <i>{uniqueNotices.length}</i>}
+              </button>
+
+              {showNoticesDropdown && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    right: 0,
+                    top: 'calc(100% + 8px)',
+                    width: 360,
+                    background: '#ffffff',
+                    border: '1px solid #dce2d6',
+                    borderRadius: 10,
+                    boxShadow: '0 10px 25px rgba(0, 30, 43, 0.15)',
+                    zIndex: 1000,
+                    overflow: 'hidden',
+                  }}
+                >
+                  <div
+                    style={{
+                      background: '#001e2b',
+                      color: '#ffffff',
+                      padding: '12px 16px',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <div>
+                      <strong style={{ fontSize: 13, display: 'block' }}>Statutory SLA Radar</strong>
+                      <small style={{ color: '#00ed64', fontSize: 10, fontFamily: 'DM Mono' }}>
+                        {uniqueNotices.length} ACTIVE COMPLIANCE NOTICES
+                      </small>
+                    </div>
+                    <button
+                      onClick={() => setShowNoticesDropdown(false)}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: '#9bb3a5',
+                        cursor: 'pointer',
+                        fontSize: 16,
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <div style={{ maxHeight: 340, overflowY: 'auto', padding: '10px 12px' }}>
+                    {uniqueNotices.length === 0 ? (
+                      <div style={{ padding: 16, textAlign: 'center', color: '#7a8e83', fontSize: 12 }}>
+                        No active statutory SLA alerts.
+                      </div>
+                    ) : (
+                      uniqueNotices.map((n, idx) => (
+                        <div
+                          key={idx}
+                          style={{
+                            padding: '10px 12px',
+                            borderRadius: 6,
+                            background: '#f8faf9',
+                            border: '1px solid #e2e8f0',
+                            borderLeft: `4px solid ${n.tone === 'coral' ? '#dc2626' : n.tone === 'gold' ? '#d97706' : '#16a34a'}`,
+                            marginBottom: 8,
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
+                            <span
+                              style={{
+                                fontSize: 9,
+                                fontFamily: 'DM Mono',
+                                fontWeight: 700,
+                                color: n.tone === 'coral' ? '#dc2626' : n.tone === 'gold' ? '#d97706' : '#16a34a',
+                                textTransform: 'uppercase',
+                              }}
+                            >
+                              {n.label === 'statutory_deadline_approaching' ? 'SLA CLOCK' : n.label.replace(/_/g, ' ')}
+                            </span>
+                            <span style={{ fontSize: 9, color: '#688072', fontFamily: 'DM Mono' }}>
+                              RFCTLARR 2013
+                            </span>
+                          </div>
+                          <strong style={{ fontSize: 12, color: '#10251f', display: 'block', lineHeight: 1.3 }}>
+                            {n.title}
+                          </strong>
+                          <p style={{ fontSize: 11, color: '#607567', margin: '3px 0 0', lineHeight: 1.35 }}>
+                            {n.detail}
+                          </p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
             <button
               className="stepper-btn"
               onClick={handleLogout}
@@ -2350,33 +2477,6 @@ export default function App() {
             })()}
           </section>
 
-          {/* Dynamic Statutory Alerts Banner from PostgreSQL */}
-          {notices.length > 0 && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12, marginBottom: 16 }}>
-              {notices.map((n, idx) => (
-                <div
-                  key={idx}
-                  style={{
-                    background: '#ffffff',
-                    border: '1px solid #dce2d6',
-                    borderLeft: `4px solid ${n.tone === 'coral' ? '#dc2626' : n.tone === 'gold' ? '#d97706' : '#16a34a'}`,
-                    borderRadius: 6,
-                    padding: '10px 14px',
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                    <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: n.tone === 'coral' ? '#dc2626' : n.tone === 'gold' ? '#d97706' : '#16a34a' }}>
-                      {n.label}
-                    </span>
-                    <span style={{ fontSize: 9, color: '#688072', textTransform: 'uppercase', letterSpacing: '0.04em' }}>STATUTORY SLA NOTICE</span>
-                  </div>
-                  <strong style={{ fontSize: 13, color: '#10251f', display: 'block', marginBottom: 2 }}>{n.title}</strong>
-                  <p style={{ fontSize: 11, color: '#607567', margin: 0, lineHeight: 1.4 }}>{n.detail}</p>
-                </div>
-              ))}
-            </div>
-          )}
 
           {/* Main Grid */}
           <section className="content-grid">
@@ -3980,6 +4080,52 @@ export default function App() {
 
             {/* Sidebar Column */}
             <aside className="secondary-column">
+              {/* Statutory Compliance Radar / SLA Clocks */}
+              {uniqueNotices.length > 0 && (
+                <section className="panel attention-panel" style={{ marginBottom: 18 }}>
+                  <div className="panel-heading">
+                    <div>
+                      <p className="section-kicker">COMPLIANCE RADAR</p>
+                      <h2>Statutory SLA Clocks</h2>
+                    </div>
+                    <span className="queue-count" style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca' }}>
+                      {uniqueNotices.length} Active
+                    </span>
+                  </div>
+
+                  <div style={{ padding: '0 20px 16px', maxHeight: 310, overflowY: 'auto' }}>
+                    {uniqueNotices.map((n, idx) => (
+                      <div
+                        key={idx}
+                        style={{
+                          background: '#fff',
+                          border: '1px solid #dce2d6',
+                          borderLeft: `4px solid ${n.tone === 'coral' ? '#dc2626' : n.tone === 'gold' ? '#d97706' : '#16a34a'}`,
+                          borderRadius: 8,
+                          padding: '10px 12px',
+                          marginBottom: 8,
+                          boxShadow: '0 1px 2px rgba(0,0,0,0.02)',
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
+                          <span style={{ fontSize: 9, font: '700 9px "DM Mono"', color: n.tone === 'coral' ? '#dc2626' : n.tone === 'gold' ? '#d97706' : '#16a34a', textTransform: 'uppercase' }}>
+                            {n.label === 'statutory_deadline_approaching' ? 'SLA CLOCK' : n.label.replace(/_/g, ' ')}
+                          </span>
+                          <span style={{ fontSize: 9, color: '#688072', font: '9px "DM Mono"', textTransform: 'uppercase' }}>
+                            RFCTLARR 2013
+                          </span>
+                        </div>
+                        <strong style={{ fontSize: 12, color: '#10251f', display: 'block', lineHeight: 1.3 }}>
+                          {n.title}
+                        </strong>
+                        <p style={{ fontSize: 11, color: '#607567', margin: '3px 0 0', lineHeight: 1.35 }}>
+                          {n.detail}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
               {/* Section 15 Objections Desk */}
               {roleHasSidebar(activePersona.id, 'objections_desk') && (
               <section className="panel attention-panel">
