@@ -91,7 +91,7 @@ export interface NavSection {
 
 // ---------------------------------------------------------------------------
 // 4. NAV_CONFIG — the canonical full navigation tree. Each role's sidebar is a
-//    filtered subset produced by `filterNavForPermissions()`.
+//    strictly filtered subset produced by `filterNavForRoleAndPermissions()`.
 // ---------------------------------------------------------------------------
 
 export const NAV_CONFIG: NavSection[] = [
@@ -117,7 +117,7 @@ export const NAV_CONFIG: NavSection[] = [
     id: 'workflow',
     label: 'Workflow',
     items: [
-      { id: 'sia', label: 'SIA Cases', permission: 'sia.create' },
+      { id: 'sia', label: 'SIA Cases', permission: 'sia.review' },
       { id: 'objections', label: 'Objections & Hearings', permission: 'objection.review' },
       { id: 'awards', label: 'Awards', permission: 'award.review' },
       { id: 'compensation', label: 'Compensation', permission: 'compensation.calculate' },
@@ -145,7 +145,7 @@ export const NAV_CONFIG: NavSection[] = [
   },
   {
     id: 'citizen',
-    label: 'My Land',
+    label: 'Citizen Services',
     items: [
       { id: 'my-land', label: 'My Land', permission: 'view_parcels' },
       { id: 'my-notices', label: 'My Notices', permission: 'view_projects' },
@@ -158,21 +158,236 @@ export const NAV_CONFIG: NavSection[] = [
 ]
 
 // ---------------------------------------------------------------------------
-// 5. filterNavForPermissions — returns only the sections/items the user can
-//    actually access. A section is included if at least one item passes; within
-//    an included section, only the passing items are kept.
+// 5. ROLE_ALLOWED_CATEGORIES — Authoritative Master Reference Specification
+//    (SIH26016_Master.pdf §21 "Panel plan", §25 "Role definitions", §26 "Permission matrix")
+//    Defines which functional category desks are authorized for each role.
 // ---------------------------------------------------------------------------
 
-export function filterNavForPermissions(permissions: Permission[]): NavSection[] {
-  const allowed = new Set<Permission>(permissions)
+export const ROLE_ALLOWED_CATEGORIES: Record<string, string[]> = {
+  // Panel 3: District Collector / CALA (operational heart of acquisition)
+  // Segregation of Duties (§25): Collector approves awards & executes possession,
+  // but CANNOT disburse payments (which belongs exclusively to Finance).
+  collector: [
+    'dashboard',
+    'projects',
+    'my-tasks',
+    'parcels',
+    'gis-map',
+    'dilrmp',
+    'sia',
+    'objections',
+    'awards',
+    'compensation',
+    'possession',
+    'deposits',
+    'litigation',
+    'audit',
+    'workflow-regimes',
+    'ai-studio',
+  ],
+
+  // Panel 3 sub-role: Additional Collector (delegated declaration & award review)
+  additional_collector: [
+    'dashboard',
+    'projects',
+    'my-tasks',
+    'parcels',
+    'gis-map',
+    'dilrmp',
+    'objections',
+    'awards',
+    'compensation',
+    'deposits',
+    'litigation',
+    'audit',
+    'workflow-regimes',
+  ],
+
+  // Panel 2/3 sub-role: Revenue Officer / Tehsildar (land title, RoR, field verification)
+  revenue_officer: [
+    'dashboard',
+    'projects',
+    'my-tasks',
+    'parcels',
+    'gis-map',
+    'dilrmp',
+    'possession',
+    'ai-studio',
+  ],
+
+  // Panel 5: Field Surveyor / GIS Officer (mobile-first parcel demarcation)
+  gis_officer: [
+    'dashboard',
+    'my-tasks',
+    'parcels',
+    'gis-map',
+    'dilrmp',
+  ],
+
+  // SIA Directorate / Officer (Sections 4-9 social impact assessments)
+  sia_officer: [
+    'dashboard',
+    'projects',
+    'my-tasks',
+    'sia',
+  ],
+
+  // Panel 8: Legal / Litigation Officer (stay orders, caveats, arbitration, Sec 77 deposits)
+  legal_officer: [
+    'dashboard',
+    'projects',
+    'my-tasks',
+    'litigation',
+    'deposits',
+    'objections',
+    'awards',
+    'audit',
+    'workflow-regimes',
+    'ai-studio',
+  ],
+
+  // Panel 7: Finance / PFMS Controller (DBT pipeline, reconciliation, interest audit)
+  // Segregation of Duties (§25): Disburses compensation, but CANNOT execute possession or mutate records.
+  finance_officer: [
+    'dashboard',
+    'projects',
+    'my-tasks',
+    'awards',
+    'compensation',
+    'payments',
+    'deposits',
+    'analytics',
+  ],
+
+  // Panel 6: Rehabilitation & Resettlement Administrator (Schedules II & III entitlements)
+  rr_officer: [
+    'dashboard',
+    'projects',
+    'my-tasks',
+    'rr',
+    'sia',
+    'grievances',
+    'analytics',
+  ],
+
+  // Panel 4: Land Requiring Body / PIA (NHAI, Railways - proposal & alignment sponsor)
+  // Segregation of Duties (§25): Read-only on parcel workflow and objections.
+  land_requiring_body: [
+    'dashboard',
+    'projects',
+    'my-tasks',
+    'gis-map',
+    'analytics',
+    'workflow-regimes',
+  ],
+
+  // Panel 1: Central Ministry / Sanctioning Authority / Government Reviewer (oversight)
+  government_reviewer: [
+    'dashboard',
+    'projects',
+    'national',
+    'analytics',
+    'sia',
+    'audit',
+    'workflow-regimes',
+    'ai-studio',
+  ],
+
+  // Panel 9: Citizen Landowner Public Transparency Portal (no administrative desks)
+  land_owner: [
+    'my-land',
+    'my-notices',
+    'my-objections',
+    'my-compensation',
+    'my-payments',
+    'grievances',
+  ],
+}
+
+/**
+ * Checks whether a given category panel is permitted for a specific role
+ * under SIH26016 Master Reference Specification §21.
+ */
+export function isCategoryAllowedForRole(role: string, categoryId: string): boolean {
+  const normRole = normalizeRole(role)
+  if (normRole === 'admin') return true
+  const allowed = ROLE_ALLOWED_CATEGORIES[normRole]
+  if (!allowed) return true
+  return allowed.includes(categoryId)
+}
+
+/**
+ * Explains statutory Segregation of Duties (SoD) or jurisdiction restriction
+ * why an officer is blocked from a category.
+ */
+export function getCategoryRestrictionReason(role: string, categoryId: string): string {
+  const normRole = normalizeRole(role)
+  if (categoryId === 'payments' && normRole === 'collector') {
+    return 'Statutory Segregation of Duties (Master Reference §25): The District Collector determines awards and enforces possession, but CANNOT disburse funds. Direct Benefit Transfer disbursement is exclusively reserved for the Finance Controller to eliminate compensation fraud.'
+  }
+  if (categoryId === 'possession' && normRole === 'finance_officer') {
+    return 'Statutory Limitation (Master Reference §25): Financial disbursement officers have no statutory authority to enforce physical land possession or execute panchnama certificates.'
+  }
+  if (['awards', 'possession', 'objections'].includes(categoryId) && normRole === 'land_requiring_body') {
+    return 'Statutory Protection (Master Reference §25): Requiring Bodies (NHAI/Railways) are project sponsors and are strictly prohibited from adjudicating citizen objections, fixing compensation, or executing possession directly.'
+  }
+  if (normRole === 'land_owner') {
+    return 'Public Transparency Boundary (Master Reference §21): Citizen landholders access self-service records, gazette notices, and claim filing portals. Administrative case disposition and government registries require departmental officer authorization.'
+  }
+  return 'Access to this specialized operational category is restricted for your role under the Master Reference Specification role matrix (§21).'
+}
+
+/**
+ * Filters navigation tree by BOTH role panel authorization and granular permissions.
+ */
+export function filterNavForRoleAndPermissions(
+  role: string,
+  permissions: Permission[] = []
+): NavSection[] {
+  const normRole = normalizeRole(role)
+  const isCitizen = isLandOwnerRole(normRole)
+  const allowedCategories = ROLE_ALLOWED_CATEGORIES[normRole]
+    ? new Set(ROLE_ALLOWED_CATEGORIES[normRole])
+    : null
+  const allowedPerms = permissions.length > 0 ? new Set<string>(permissions) : null
+
+  // Canonical permission alternatives for specific functional modules
+  const categoryPermitted = (itemId: string, perm: Permission): boolean => {
+    if (!allowedPerms) return true
+    if (allowedPerms.has(perm)) return true
+    // Collector & Officer aliases where role holds higher statutory sign-off authority
+    if (itemId === 'awards' && (allowedPerms.has('award.approve') || allowedPerms.has('award.review') || allowedPerms.has('award.prepare'))) return true
+    if (itemId === 'compensation' && (allowedPerms.has('compensation.calculate') || allowedPerms.has('award.approve') || allowedPerms.has('award.prepare'))) return true
+    if (itemId === 'sia' && (allowedPerms.has('sia.create') || allowedPerms.has('sia.review'))) return true
+    if (itemId === 'dilrmp' && (allowedPerms.has('parcel.verify') || allowedPerms.has('view_parcels'))) return true
+    if (itemId === 'dashboard' || itemId === 'my-tasks') return true
+    return false
+  }
+
   const sections: NavSection[] = []
   for (const section of NAV_CONFIG) {
-    const items = section.items.filter((item) => allowed.has(item.permission))
+    // If citizen: ONLY show citizen services section
+    if (isCitizen && section.id !== 'citizen') continue
+    // If administrative role: NEVER show citizen self-service section
+    if (!isCitizen && section.id === 'citizen') continue
+
+    const items = section.items.filter((item) => {
+      // 1. Must be allowed for this role per Master Reference PDF §21
+      if (allowedCategories && !allowedCategories.has(item.id)) return false
+      // 2. Permission check
+      return categoryPermitted(item.id, item.permission)
+    })
+
     if (items.length > 0) {
       sections.push({ ...section, items })
     }
   }
   return sections
+}
+
+// Retained for backward compatibility
+export function filterNavForPermissions(permissions: Permission[]): NavSection[] {
+  return filterNavForRoleAndPermissions('collector', permissions)
 }
 
 // ---------------------------------------------------------------------------

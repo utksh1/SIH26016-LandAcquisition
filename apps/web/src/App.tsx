@@ -34,6 +34,9 @@ import {
   type WorkflowAction,
   NAV_CONFIG,
   filterNavForPermissions,
+  filterNavForRoleAndPermissions,
+  isCategoryAllowedForRole,
+  getCategoryRestrictionReason,
   roleKpiCards,
   stageWorkflowActions,
   isLandOwnerRole,
@@ -2047,12 +2050,7 @@ export default function App() {
               Only items the user has permission for are shown. */}
           {(() => {
             const perms = rbacContext?.permissions || []
-            // If RBAC context is loaded, filter nav by permissions.
-            // Otherwise (demo mode without backend), show all items so the
-            // UI isn't empty — the backend will still enforce 403 on mutations.
-            const sections = perms.length > 0
-              ? filterNavForPermissions(perms)
-              : NAV_CONFIG
+            const sections = filterNavForRoleAndPermissions(activePersona.id, perms)
             const iconMap: Record<string, IconName> = {
               dashboard: 'grid', projects: 'folder', 'my-tasks': 'check',
               parcels: 'map', 'gis-map': 'map', dilrmp: 'search',
@@ -2083,37 +2081,41 @@ export default function App() {
               })
             )
           })()}
-          {/* Always-available workspace tools */}
-          {can('project.create') && (
+          {/* Always-available workspace tools - Gated by Role Matrix per Master PDF */}
+          {(can('create_projects') || can('project.create')) && !isLandOwnerRole(activePersona.id) && (
             <button className="nav-link" onClick={() => setShowCreateModal(true)}>
               <Icon name="plus" />
               <span>New Acquisition Project</span>
             </button>
           )}
-          <button
-            className={`nav-link ${activeCategory === 'workflow-regimes' ? 'active' : ''}`}
-            onClick={() => {
-              setActiveCategory('workflow-regimes')
-              apiClient.listWorkflowRegimes().then(setRegimes).catch(() => {})
-              showToast('Opened: Workflow Regimes')
-            }}
-          >
-            <Icon name="folder" />
-            <span>Workflow Regimes</span>
-            <b>04</b>
-          </button>
-          <button
-            className={`nav-link ${activeCategory === 'ai-studio' ? 'active' : ''}`}
-            onClick={() => {
-              setActiveCategory('ai-studio')
-              showToast('Opened: AI & Integrations Studio')
-            }}
-          >
-            <Icon name="shield" />
-            <span>AI & Integrations Studio</span>
-            <b>AI</b>
-          </button>
-          {can('view_audit') && (
+          {isCategoryAllowedForRole(activePersona.id, 'workflow-regimes') && (
+            <button
+              className={`nav-link ${activeCategory === 'workflow-regimes' ? 'active' : ''}`}
+              onClick={() => {
+                setActiveCategory('workflow-regimes')
+                apiClient.listWorkflowRegimes().then(setRegimes).catch(() => {})
+                showToast('Opened: Workflow Regimes')
+              }}
+            >
+              <Icon name="folder" />
+              <span>Workflow Regimes</span>
+              <b>04</b>
+            </button>
+          )}
+          {isCategoryAllowedForRole(activePersona.id, 'ai-studio') && (
+            <button
+              className={`nav-link ${activeCategory === 'ai-studio' ? 'active' : ''}`}
+              onClick={() => {
+                setActiveCategory('ai-studio')
+                showToast('Opened: AI & Integrations Studio')
+              }}
+            >
+              <Icon name="shield" />
+              <span>AI & Integrations Studio</span>
+              <b>AI</b>
+            </button>
+          )}
+          {isCategoryAllowedForRole(activePersona.id, 'audit') && can('view_audit') && (
             <button
               className={`nav-link ${activeCategory === 'audit' ? 'active' : ''}`}
               onClick={() => {

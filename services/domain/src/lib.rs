@@ -427,9 +427,10 @@ const ALL_PERMISSIONS: [Permission; 45] = [
 ];
 
 // Collector: 20 perms — owns the high-stakes approval gates across the
+// Collector: owns the high-stakes approval gates across the
 // RFCTLARR workflow (Section 11 notification, hearing, award approval,
-// possession, document gate, and stage rejection).
-const COLLECTOR_PERMISSIONS: [Permission; 20] = [
+// solatium calculation, possession, document gate, and stage rejection).
+const COLLECTOR_PERMISSIONS: [Permission; 27] = [
     Permission::DashboardView,
     Permission::ViewProjects,
     Permission::CreateProjects,
@@ -442,18 +443,25 @@ const COLLECTOR_PERMISSIONS: [Permission; 20] = [
     Permission::CreateOwners,
     Permission::UpdateOwners,
     Permission::ViewStakeholders,
+    Permission::ParcelVerify,
     Permission::NotificationIssue,
     Permission::ObjectionReview,
     Permission::HearingConduct,
+    Permission::AwardPrepare,
+    Permission::AwardReview,
     Permission::AwardApprove,
+    Permission::CompensationCalculate,
     Permission::PossessionInitiate,
     Permission::DocumentApprove,
     Permission::WorkflowReject,
+    Permission::DepositCreate,
+    Permission::LitigationManage,
+    Permission::SiaReview,
     Permission::ViewAudit,
 ];
 
-// Revenue Officer: 9 perms — parcel record verification + uploads.
-const REVENUE_OFFICER_PERMISSIONS: [Permission; 9] = [
+// Revenue Officer: 10 perms — parcel record verification, RoR extracts, possession panchnama assistance.
+const REVENUE_OFFICER_PERMISSIONS: [Permission; 10] = [
     Permission::DashboardView,
     Permission::ViewProjects,
     Permission::ViewParcels,
@@ -462,10 +470,11 @@ const REVENUE_OFFICER_PERMISSIONS: [Permission; 9] = [
     Permission::ViewOwners,
     Permission::ParcelVerify,
     Permission::DocumentUpload,
+    Permission::PossessionInitiate,
     Permission::TransitionProjects,
 ];
 
-const LAND_REQUIRING_BODY_PERMISSIONS: [Permission; 9] = [
+const LAND_REQUIRING_BODY_PERMISSIONS: [Permission; 10] = [
     Permission::DashboardView,
     Permission::ViewProjects,
     Permission::CreateProjects,
@@ -475,20 +484,26 @@ const LAND_REQUIRING_BODY_PERMISSIONS: [Permission; 9] = [
     Permission::ViewStakeholders,
     Permission::DocumentUpload,
     Permission::TransitionProjects,
+    Permission::AnalyticsView,
 ];
 
-// Additional Collector: 10 perms — drafts declarations, reviews awards
-// and documents. Cannot issue Section 11 notification or approve the
-// final award (those stay with the Collector).
-const ADDITIONAL_COLLECTOR_PERMISSIONS: [Permission; 10] = [
+// Additional Collector: 16 perms — drafts declarations, reviews awards,
+// objections and documents.
+const ADDITIONAL_COLLECTOR_PERMISSIONS: [Permission; 16] = [
     Permission::DashboardView,
     Permission::ViewProjects,
     Permission::UpdateProjects,
     Permission::TransitionProjects,
     Permission::ViewParcels,
     Permission::ViewOwners,
+    Permission::ParcelVerify,
     Permission::DeclarationPrepare,
+    Permission::ObjectionReview,
+    Permission::HearingConduct,
     Permission::AwardReview,
+    Permission::CompensationCalculate,
+    Permission::DepositCreate,
+    Permission::LitigationManage,
     Permission::DocumentReview,
     Permission::ViewAudit,
 ];
@@ -503,7 +518,7 @@ const GIS_OFFICER_PERMISSIONS: [Permission; 7] = [
     Permission::DocumentUpload,
 ];
 
-const SIA_OFFICER_PERMISSIONS: [Permission; 9] = [
+const SIA_OFFICER_PERMISSIONS: [Permission; 10] = [
     Permission::DashboardView,
     Permission::ViewProjects,
     Permission::UpdateProjects,
@@ -511,6 +526,7 @@ const SIA_OFFICER_PERMISSIONS: [Permission; 9] = [
     Permission::ViewOwners,
     Permission::SiaCreate,
     Permission::SiaReview,
+    Permission::HearingConduct,
     Permission::DocumentUpload,
     Permission::TransitionProjects,
 ];
@@ -533,36 +549,45 @@ const LEGAL_OFFICER_PERMISSIONS: [Permission; 13] = [
     Permission::SubmitGrievances,
 ];
 
-// Finance Officer: 10 perms — compensation calculation + PFMS payment flow.
-const FINANCE_OFFICER_PERMISSIONS: [Permission; 10] = [
+// Finance Officer: 13 perms — compensation review, PFMS payment flow, deposits, analytics.
+const FINANCE_OFFICER_PERMISSIONS: [Permission; 13] = [
     Permission::DashboardView,
     Permission::ViewProjects,
     Permission::UpdateProjects,
     Permission::ViewParcels,
     Permission::ViewOwners,
     Permission::CompensationCalculate,
+    Permission::AwardReview,
     Permission::PaymentInitiate,
     Permission::PaymentApprove,
+    Permission::DepositCreate,
+    Permission::AnalyticsView,
     Permission::TransitionProjects,
     Permission::DocumentUpload,
 ];
 
-// R&R Officer: 7 perms — manages resettlement & rehabilitation entitlements.
-const RR_OFFICER_PERMISSIONS: [Permission; 7] = [
+// R&R Officer: 10 perms — manages resettlement & rehabilitation entitlements, SIMP review, grievances.
+const RR_OFFICER_PERMISSIONS: [Permission; 10] = [
     Permission::DashboardView,
     Permission::ViewProjects,
     Permission::ViewParcels,
     Permission::ViewOwners,
     Permission::RrManage,
+    Permission::SiaReview,
+    Permission::SubmitGrievances,
+    Permission::AnalyticsView,
     Permission::DocumentUpload,
     Permission::TransitionProjects,
 ];
 
-// Government Reviewer: 10 perms — oversight over SIA, declarations,
+// Government Reviewer: 13 perms — oversight over SIA, declarations,
 // analytics, and the national dashboard.
-const GOVERNMENT_REVIEWER_PERMISSIONS: [Permission; 10] = [
+const GOVERNMENT_REVIEWER_PERMISSIONS: [Permission; 13] = [
     Permission::DashboardView,
     Permission::ViewProjects,
+    Permission::CreateProjects,
+    Permission::UpdateProjects,
+    Permission::TransitionProjects,
     Permission::ViewParcels,
     Permission::ViewOwners,
     Permission::ViewStakeholders,

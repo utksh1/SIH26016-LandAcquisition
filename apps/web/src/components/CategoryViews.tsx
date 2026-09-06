@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import type { StatutoryStageItem, StakeholderPersona } from '../App'
 import type { Project, MyTaskItem } from '../api/client'
+import { isCategoryAllowedForRole, getCategoryRestrictionReason } from '../rbac'
 
 export interface CategoryViewsProps {
   activeCategory: string
@@ -315,6 +316,64 @@ export function CategoryViews({
       </div>
     </div>
   )
+
+  // =========================================================================
+  // STATUTORY SEGREGATION OF DUTIES (SOD) RESTRICTION CHECK (§21 & §25)
+  // =========================================================================
+  if (!isCategoryAllowedForRole(activePersona.id, activeCategory)) {
+    return (
+      <div className="category-panel-container">
+        {renderCategoryHeader(
+          `${activeCategory.replace(/-/g, ' ').toUpperCase()} — Access Restricted`,
+          getCategoryRestrictionReason(activePersona.id, activeCategory),
+          'STATUTORY RESTRICTION',
+          '#fa6e39',
+          `Restricted for ${activePersona.title}`
+        )}
+
+        <div style={{ background: '#ffffff', border: '1px solid #e1e5e8', borderRadius: 12, padding: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+            <span style={{ fontSize: 28 }}>🛡️</span>
+            <div>
+              <h3 style={{ margin: 0, fontSize: 18, color: '#001e2b' }}>
+                Role Segregation of Duties: {activePersona.title}
+              </h3>
+              <p style={{ margin: '4px 0 0', fontSize: 13, color: '#5c6c7a' }}>
+                Governed by SIH26016 Master Reference Specification (§21 Panel Plan & §25 Role Definitions)
+              </p>
+            </div>
+          </div>
+
+          <div style={{ background: '#fff8e0', border: '1px solid #fef3c7', borderRadius: 8, padding: 16, marginBottom: 20 }}>
+            <strong style={{ color: '#946f3f', fontSize: 13, display: 'block', marginBottom: 6 }}>
+              Statutory Reason for Restriction
+            </strong>
+            <p style={{ color: '#78350f', fontSize: 13, margin: 0, lineHeight: 1.5 }}>
+              {getCategoryRestrictionReason(activePersona.id, activeCategory)}
+            </p>
+          </div>
+
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button
+              onClick={() => onSelectCategory('dashboard')}
+              style={{
+                background: '#001e2b',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: 9999,
+                padding: '10px 20px',
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              ← Return to Authorized Command Centre
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   // =========================================================================
   // CATEGORY 1: PROJECTS PORTFOLIO REGISTER
