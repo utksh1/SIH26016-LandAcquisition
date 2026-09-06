@@ -451,9 +451,12 @@ pub fn can_transition(
                 | (ProjectStage::Hearing, ProjectStage::ObjectionPeriod)
                 | (ProjectStage::Declaration, ProjectStage::AwardPreparation)
                 | (ProjectStage::AwardPreparation, ProjectStage::AwardApproval)
+                | (ProjectStage::AwardApproval, ProjectStage::Possession)
                 | (ProjectStage::AwardApproval, ProjectStage::CompensationCalculation)
                 | (ProjectStage::CompensationCalculation, ProjectStage::PaymentProcessing)
+                | (ProjectStage::CompensationCalculation, ProjectStage::Possession)
                 | (ProjectStage::PaymentProcessing, ProjectStage::Possession)
+                | (ProjectStage::Possession, ProjectStage::ProjectClosure)
                 | (ProjectStage::Possession, ProjectStage::RrCompletion)
                 | (ProjectStage::RrCompletion, ProjectStage::ProjectClosure)
                 // Legacy alias compatibility
@@ -676,9 +679,15 @@ pub fn check_timeline_gates(
         }
     }
 
-    // §22.6 — PaymentProcessing → Possession requires 80% compensation paid.
-    if project.stage == ProjectStage::PaymentProcessing
-        && *target == ProjectStage::Possession
+    // §22.6 / Section 38 — Transition to Possession requires compensation payment.
+    if matches!(
+        project.stage,
+        ProjectStage::PaymentProcessing
+            | ProjectStage::AwardApproval
+            | ProjectStage::CompensationCalculation
+            | ProjectStage::FundsDisbursed
+            | ProjectStage::CompensationAward
+    ) && *target == ProjectStage::Possession
     {
         match (compensation_paid_paise, compensation_awarded_paise) {
             (Some(paid), Some(awarded)) => {

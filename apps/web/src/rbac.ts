@@ -314,9 +314,19 @@ export interface WorkflowAction {
  * contract and the per-task document-completeness check).
  */
 const STAGE_ACTIONS: Record<string, WorkflowAction[]> = {
+  project_proposal: [
+    { action: 'submit_proposal', label: 'Submit Proposal', permission: 'create_projects', variant: 'primary' },
+    { action: 'view_documents', label: 'View Documents', permission: 'document.review', variant: 'secondary' },
+  ],
   proposal_initiation: [
     { action: 'submit_proposal', label: 'Submit Proposal', permission: 'create_projects', variant: 'primary' },
     { action: 'view_documents', label: 'View Documents', permission: 'document.review', variant: 'secondary' },
+  ],
+  land_identification: [
+    { action: 'verify', label: 'Verify Parcel', permission: 'parcel.verify', variant: 'primary' },
+    { action: 'return', label: 'Return for Correction', permission: 'workflow.reject', variant: 'danger' },
+    { action: 'view_documents', label: 'View Documents', permission: 'document.review', variant: 'secondary' },
+    { action: 'upload_ror', label: 'Upload RoR', permission: 'document.upload', variant: 'secondary' },
   ],
   land_record_verification: [
     { action: 'verify', label: 'Verify Parcel', permission: 'parcel.verify', variant: 'primary' },
@@ -338,6 +348,7 @@ const STAGE_ACTIONS: Record<string, WorkflowAction[]> = {
   ],
   preliminary_notification: [
     { action: 'issue_notification', label: 'Issue Notification', permission: 'notification.issue', variant: 'primary' },
+    { action: 'approve', label: 'Approve Notification', permission: 'notification.issue', variant: 'primary' },
     { action: 'view_documents', label: 'View Documents', permission: 'document.review', variant: 'secondary' },
   ],
   objection_period: [
@@ -352,6 +363,7 @@ const STAGE_ACTIONS: Record<string, WorkflowAction[]> = {
   declaration: [
     { action: 'prepare_declaration', label: 'Prepare Declaration', permission: 'declaration.prepare', variant: 'primary' },
     { action: 'approve_declaration', label: 'Approve Declaration', permission: 'declaration.approve', variant: 'primary' },
+    { action: 'approve', label: 'Approve Declaration', permission: 'declaration.approve', variant: 'primary' },
     { action: 'return', label: 'Return for Correction', permission: 'workflow.reject', variant: 'danger' },
   ],
   award_preparation: [
@@ -361,6 +373,7 @@ const STAGE_ACTIONS: Record<string, WorkflowAction[]> = {
   ],
   award_approval: [
     { action: 'approve_award', label: 'Approve Award', permission: 'award.approve', variant: 'primary' },
+    { action: 'approve', label: 'Approve Award', permission: 'award.approve', variant: 'primary' },
     { action: 'return', label: 'Return for Correction', permission: 'workflow.reject', variant: 'danger' },
   ],
   compensation_calculation: [
@@ -374,15 +387,18 @@ const STAGE_ACTIONS: Record<string, WorkflowAction[]> = {
     { action: 'record_payment', label: 'Record Payment', permission: 'payment.approve', variant: 'secondary' },
   ],
   possession: [
-    { action: 'initiate_possession', label: 'Initiate Possession', permission: 'possession.initiate', variant: 'primary' },
+    { action: 'initiate_possession', label: 'Take Physical Possession', permission: 'possession.initiate', variant: 'primary' },
+    { action: 'approve', label: 'Approve Possession Order', permission: 'possession.initiate', variant: 'primary' },
     { action: 'view_evidence', label: 'View Evidence', permission: 'document.review', variant: 'secondary' },
   ],
   rr_completion: [
     { action: 'verify_family', label: 'Verify Family', permission: 'rr.manage', variant: 'secondary' },
     { action: 'approve_entitlement', label: 'Approve Entitlement', permission: 'rr.manage', variant: 'primary' },
     { action: 'complete_rr', label: 'Complete R&R', permission: 'rr.manage', variant: 'primary' },
+    { action: 'approve', label: 'Approve R&R Completion', permission: 'rr.manage', variant: 'primary' },
   ],
   project_closure: [
+    { action: 'close_project', label: 'Complete RoR Mutation & Closure', permission: 'transition_projects', variant: 'primary' },
     { action: 'view_audit', label: 'View Audit', permission: 'view_audit', variant: 'secondary' },
     { action: 'export_report', label: 'Export Report', permission: 'analytics.view', variant: 'secondary' },
   ],
@@ -400,7 +416,13 @@ export function stageWorkflowActions(stageCode: string, allowedActions: string[]
   const allowed = new Set<string>(allowedActions)
   const candidates = STAGE_ACTIONS[stageCode]
   if (!candidates) return []
-  return candidates.filter((candidate) => allowed.has(candidate.action))
+  return candidates.filter((candidate) =>
+    allowed.has(candidate.action) ||
+    (allowed.has('approve') && candidate.action.startsWith('approve')) ||
+    (allowed.has('return') && (candidate.action === 'return' || candidate.action.startsWith('reject'))) ||
+    (allowed.has('reject') && (candidate.action === 'return' || candidate.action.startsWith('reject'))) ||
+    allowed.has('*')
+  )
 }
 
 // ---------------------------------------------------------------------------

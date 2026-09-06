@@ -181,6 +181,7 @@ export interface StageGateDecisionPayload {
   decision?: 'APPROVE' | 'REJECT' | string
   remarks?: string
   documents?: string[]
+  target_stage?: ProjectStage | string
 }
 
 export interface StageGateDecisionResponse {

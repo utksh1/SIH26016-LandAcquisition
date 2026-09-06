@@ -230,6 +230,8 @@ pub struct StageGateDecisionRequest {
     pub remarks: Option<String>,
     #[serde(default)]
     pub documents: Vec<String>,
+    #[serde(default)]
+    pub target_stage: Option<ProjectStage>,
 }
 
 fn default_approve() -> String {
@@ -919,8 +921,7 @@ async fn serve_frontend(
     req: axum::extract::Request,
 ) -> Result<axum::response::Response, ApiError> {
     use axum::body::Body;
-    use axum::http::{header, StatusCode};
-    use axum::response::IntoResponse;
+    use axum::http::header;
     use std::path::PathBuf;
 
     let dist_dir = std::env::var("FRONTEND_DIST")
@@ -1544,7 +1545,7 @@ async fn advance_workflow_endpoint(
     // cannot be held across .await). The variables needed to construct the
     // audit payload (instance_clone, from, to, project_id, next_handler) are
     // all Copy or cheaply Cloned out of the block.
-    let (instance_clone, from, to, project_id, next_handler) = {
+    let (instance_clone, from, to, _project_id, next_handler) = {
         let mut in_mem = state.in_memory.write().unwrap();
         let (instance_clone, from, to, project_id, next_handler) = {
             let instance = in_mem
@@ -1735,10 +1736,10 @@ fn next_statutory_stage(current: &ProjectStage) -> Option<ProjectStage> {
         ProjectStage::Hearing => Some(ProjectStage::Declaration),
         ProjectStage::Declaration | ProjectStage::Sanctioned => Some(ProjectStage::AwardPreparation),
         ProjectStage::AwardPreparation => Some(ProjectStage::AwardApproval),
-        ProjectStage::AwardApproval | ProjectStage::CompensationAward => Some(ProjectStage::CompensationCalculation),
+        ProjectStage::AwardApproval | ProjectStage::CompensationAward => Some(ProjectStage::Possession),
         ProjectStage::CompensationCalculation => Some(ProjectStage::PaymentProcessing),
         ProjectStage::PaymentProcessing | ProjectStage::FundsDisbursed => Some(ProjectStage::Possession),
-        ProjectStage::Possession => Some(ProjectStage::RrCompletion),
+        ProjectStage::Possession => Some(ProjectStage::ProjectClosure),
         ProjectStage::RrCompletion | ProjectStage::RrScheme => Some(ProjectStage::ProjectClosure),
         ProjectStage::ProjectClosure | ProjectStage::Completed => None,
         ProjectStage::Lapsed => None,
@@ -1758,9 +1759,9 @@ fn previous_statutory_stage(current: &ProjectStage) -> ProjectStage {
         ProjectStage::AwardApproval => ProjectStage::AwardPreparation,
         ProjectStage::CompensationCalculation => ProjectStage::AwardApproval,
         ProjectStage::PaymentProcessing => ProjectStage::CompensationCalculation,
-        ProjectStage::Possession => ProjectStage::PaymentProcessing,
+        ProjectStage::Possession => ProjectStage::AwardApproval,
         ProjectStage::RrCompletion => ProjectStage::Possession,
-        ProjectStage::ProjectClosure => ProjectStage::RrCompletion,
+        ProjectStage::ProjectClosure => ProjectStage::Possession,
         _ => ProjectStage::ProposalInitiation,
     }
 }
@@ -1786,7 +1787,9 @@ async fn approve_workflow_endpoint(
             .ok_or_else(|| ApiError::NotFound(format!("Workflow not found for ID '{}'", workflow_id)))?;
         let project_id = instance.project_id;
         let current_stage = instance.current_stage;
-        let next_stage = next_statutory_stage(&current_stage).unwrap_or(ProjectStage::ProjectClosure);
+        let next_stage = request.target_stage
+            .or_else(|| next_statutory_stage(&current_stage))
+            .unwrap_or(ProjectStage::ProjectClosure);
         (workflow_id, project_id, current_stage, next_stage)
     };
 
@@ -5583,7 +5586,7 @@ mod tests {
         assert_eq!(status.workflow_id, w_id);
         assert!(!status.required_documents.is_empty());
 
-        // 2. Reject when missing mandatory documents
+        // 2. Reject when mandatory documents missing
         let bad_approve = approve_workflow_endpoint(
             State(state.clone()),
             Path(w_id.to_string()),
@@ -5592,6 +5595,7 @@ mod tests {
                 decision: "APPROVE".to_string(),
                 remarks: Some("Approved without docs".to_string()),
                 documents: vec![], // Missing required docs
+                target_stage: None,
             }),
         ).await;
         assert!(bad_approve.is_err());
@@ -5610,6 +5614,7 @@ mod tests {
                     "DILRMP Sync Record".to_string(),
                     "Title Verification Certificate".to_string(),
                 ],
+                target_stage: None,
             }),
         ).await;
         assert!(unauthorized.is_err());
@@ -5628,6 +5633,7 @@ mod tests {
                     "DILRMP Sync Record".to_string(),
                     "Title Verification Certificate".to_string(),
                 ],
+                target_stage: None,
             }),
         ).await.unwrap();
 

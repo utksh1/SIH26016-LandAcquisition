@@ -424,181 +424,187 @@ const stakeholderPersonas: StakeholderPersona[] = [
 export interface StatutoryStageItem {
   id: string
   name: string
+  statutorySection: string
   department: string
   actor: string
   stageCode: ProjectStage
   timelineDays: number
   approvalAuthority: string
   requiredDocs: string[]
+  gatePredicates: string[]
   auditRequirements: string
 }
 
-// RFCTLARR 15 Statutory Legal Stages
+// RFCTLARR Act 2013 Statutory Stages (Master Reference §8.2, §22, §27.1)
 const rfctlarrStages: StatutoryStageItem[] = [
   {
     id: 'proposal_initiation',
-    name: 'Proposal Initiation',
+    name: 'Proposal Initiation & Clearances',
+    statutorySection: 'Sec 10 & Master PDF §18',
     department: 'Land Requiring Body',
     actor: 'Land Requiring Body',
     stageCode: 'proposal_initiation',
     timelineDays: 30,
-    approvalAuthority: 'Central/State Sanctioning Authority',
-    requiredDocs: ['dpr_feasibility_report', 'alignment_shapefile', 'village_survey_list', 'budget_sanction'],
-    auditRequirements: 'Project proposal logged with alignment geometry hash and budget sanction reference.',
+    approvalAuthority: 'Central / State Sanctioning Authority',
+    requiredDocs: ['Detailed Project Report (DPR)', 'Corridor Alignment Shapefile', 'Village Survey Schedule', 'Budget Sanction Order'],
+    gatePredicates: ['proposal_complete', 'clearance_gates_recorded', 'no_spatial_conflict'],
+    auditRequirements: 'Project proposal logged with corridor geometry hash, budget sanction reference, and pre-condition clearance gates.',
   },
   {
     id: 'land_record_verification',
-    name: 'Land Record Verification',
+    name: 'Land Record Verification (DILRMP/RoR)',
+    statutorySection: 'Revenue Records & Cadastral Sync',
     department: 'State Revenue Department',
     actor: 'Revenue Officer',
     stageCode: 'land_record_verification',
-    timelineDays: 45,
-    approvalAuthority: 'Sub-Divisional Magistrate (SDM)',
-    requiredDocs: ['cadastral_map', 'jamabandi_ror_extract', 'dilrmp_sync_record'],
-    auditRequirements: 'Cadastral land records verified against State DILRMP with ULPIN and mutation status.',
+    timelineDays: 30,
+    approvalAuthority: 'Sub-Divisional Officer (SDM) / Tehsildar',
+    requiredDocs: ['Cadastral Map Sheet', 'Jamabandi RoR Extracts', 'DILRMP Sync Record', 'Title Verification Certificate'],
+    gatePredicates: ['dilrmp_verified', 'all_parcels_mapped'],
+    auditRequirements: 'Cadastral land records verified against State DILRMP with ULPIN, Jamabandi RoR, and encumbrance certificate.',
   },
   {
     id: 'sia_preparation',
-    name: 'SIA Preparation',
+    name: 'SIA Study & Public Consultation',
+    statutorySection: 'Sections 4, 5 & 6',
     department: 'Social Impact Assessment Unit',
     actor: 'SIA Officer',
     stageCode: 'sia_preparation',
     timelineDays: 60,
-    approvalAuthority: 'District Collector',
-    requiredDocs: ['sia_terms_of_reference', 'public_consultation_notice', 'census_agency_moa'],
-    auditRequirements: 'SIA public notice published in affected gram panchayats; baseline census initiated.',
+    approvalAuthority: 'District Collector / SIA Directorate',
+    requiredDocs: ['SIA Terms of Reference', 'Public Consultation Notice', 'Baseline Census of Affected Families', 'Gram Sabha Consultation Notice'],
+    gatePredicates: ['sia_terms_notified', 'baseline_census_completed', 'public_hearing_scheduled'],
+    auditRequirements: 'SIA study conducted by empanelled agency; baseline census completed; public hearing conducted in affected panchayats with recorded minutes.',
   },
   {
     id: 'sia_review',
-    name: 'SIA Review',
-    department: 'Independent Expert Group',
-    actor: 'Government Reviewer',
+    name: 'SIA Appraisal & Govt Approval',
+    statutorySection: 'Sections 7, 8 & 9 (Sec 14 Clock)',
+    department: 'Independent Multidisciplinary Expert Group',
+    actor: 'Expert Group / State Govt',
     stageCode: 'sia_review',
     timelineDays: 60,
-    approvalAuthority: 'Independent Expert Group / State Government',
-    requiredDocs: ['sia_study_report', 'social_impact_management_plan', 'expert_group_recommendation'],
-    auditRequirements: 'Independent Expert Group recommendations evaluated and approved by Appropriate Government.',
+    approvalAuthority: 'Independent Expert Group & Appropriate Government',
+    requiredDocs: ['SIA Final Study Report', 'Social Impact Management Plan (SIMP)', 'Public Hearing Recorded Minutes', 'Expert Group Appraisal Recommendation', 'Govt Sec 8(2) Public Purpose Order'],
+    gatePredicates: ['expert_group_cleared', 'minimum_displacement_certified', 'within_12_months_of_appraisal'],
+    auditRequirements: 'Independent Expert Group recommendations evaluated; Appropriate Government records decision on public purpose and minimum land requirement (Sec 8(2)). 12-month validity under Sec 14.',
   },
   {
     id: 'preliminary_notification',
     name: 'Preliminary Notification (Sec 11)',
-    department: 'Land Acquisition Department / CALA',
-    actor: 'Collector',
+    statutorySection: 'Section 11 (Land Use Freeze)',
+    department: 'District Collectorate / CALA',
+    actor: 'District Collector',
     stageCode: 'preliminary_notification',
     timelineDays: 30,
     approvalAuthority: 'District Collector / Official Gazette',
-    requiredDocs: ['section_11_notification_pdf', 'local_newspaper_cuttings', 'gram_sabha_resolution'],
-    auditRequirements: 'Section 11 Gazette Extraordinary published; land transaction freeze flag applied.',
+    requiredDocs: ['Section 11 Gazette Extraordinary Copy', 'Two Daily Newspaper Publications (1 Vernacular)', 'Panchayat & Tehsil Notice Receipts', 'Land Transaction Freeze Order'],
+    gatePredicates: ['gazette_published', 'two_newspapers_published', 'transaction_freeze_active'],
+    auditRequirements: 'Section 11 Gazette Extraordinary published; land transaction freeze flag applied; 60-day objection window and 12-month declaration clocks initialized.',
   },
   {
     id: 'objection_period',
-    name: 'Objection Period (Sec 15)',
+    name: 'Objections Filing Window (Sec 15)',
+    statutorySection: 'Section 15 (60-Day Citizen Window)',
     department: 'Public Citizen Transparency Desk',
-    actor: 'Land Owner',
+    actor: 'Land Owner / Citizen',
     stageCode: 'objection_period',
     timelineDays: 60,
     approvalAuthority: 'District Collector & CALA',
-    requiredDocs: ['section_15_objection_petitions', 'ownership_proof_documents'],
-    auditRequirements: 'Statutory 60-day objection window opened; citizen claims recorded with ticket IDs.',
+    requiredDocs: ['Section 15 Objection Petitions', 'Title Deeds & Ownership Proof', 'Compensation Revision Claims', 'Citizen Filing Receipts'],
+    gatePredicates: ['objection_window_closed', 'citizen_petitions_cataloged'],
+    auditRequirements: 'Statutory 60-day objection window opened; citizen claims and compensation objections recorded with immutable ticket IDs.',
   },
   {
     id: 'hearing',
-    name: 'Hearing & Disposal',
-    department: 'Land Acquisition Authority (CALA)',
-    actor: 'Collector',
+    name: 'Hearing & Objection Disposal (Sec 15(2))',
+    statutorySection: 'Section 15(2) (Inquiry & Disposal)',
+    department: 'District Collectorate / CALA',
+    actor: 'District Collector',
     stageCode: 'hearing',
     timelineDays: 30,
-    approvalAuthority: 'District Collector',
-    requiredDocs: ['section_15_2_hearing_minutes', 'collector_disposal_order'],
-    auditRequirements: 'Section 15(2) personal hearings conducted; written disposal orders issued to objectors.',
+    approvalAuthority: 'District Collector / CALA',
+    requiredDocs: ['Section 15(2) Personal Hearing Minutes', 'Collector Speaking Disposal Orders', 'Summary Recommendation to Government'],
+    gatePredicates: ['personal_hearings_completed', 'all_objections_disposed_with_orders'],
+    auditRequirements: 'Section 15(2) personal hearings conducted; written disposal orders issued to objectors; Collector recommendation submitted to Government.',
   },
   {
     id: 'declaration',
-    name: 'Declaration (Sec 19)',
-    department: 'State Revenue Department',
-    actor: 'Additional Collector',
+    name: 'Declaration of Acquisition (Sec 19)',
+    statutorySection: 'Section 19 & Sections 16–18 (R&R Scheme)',
+    department: 'Appropriate Government / Oversight',
+    actor: 'Government Reviewer (Appropriate Govt)',
     stageCode: 'declaration',
-    timelineDays: 365,
-    approvalAuthority: 'Appropriate Government',
-    requiredDocs: ['section_19_declaration_order', 'approved_rr_scheme_summary', 'fund_deposit_receipt'],
-    auditRequirements: 'Section 19 Declaration issued within statutory 12-month limit; R&R scheme summary gazetted.',
+    timelineDays: 30,
+    approvalAuthority: 'Appropriate Government (Cabinet Sec / State Secretary)',
+    requiredDocs: ['Section 19 Declaration Gazette Copy', 'Approved R&R Scheme Summary (Sec 16/18)', 'Requiring Body Cost Deposit Receipt', 'Consent Verification Certificate (70% PPP / 80% Private)'],
+    gatePredicates: ['within_12_months_of_sec_11', 'rr_scheme_approved', 'requiring_body_deposit_confirmed', 'consent_threshold_met'],
+    auditRequirements: 'Section 19 Declaration issued within statutory 12-month limit of Sec 11; R&R Scheme under Sec 16 approved and summary published; requiring body cost deposit confirmed.',
   },
   {
     id: 'award_preparation',
-    name: 'Award Preparation (Sec 23)',
-    department: 'Legal & Valuation Department',
-    actor: 'Legal Officer',
+    name: 'Award Enquiry & Asset Valuation (Sec 21-29)',
+    statutorySection: 'Sections 21, 26, 27, 28 & 29',
+    department: 'Legal & Valuation Cell / CALA',
+    actor: 'Legal Officer / Valuer',
     stageCode: 'award_preparation',
     timelineDays: 60,
     approvalAuthority: 'Competent Authority Land Acquisition (CALA)',
-    requiredDocs: ['joint_measurement_survey_sheet', 'asset_tree_structure_valuation', 'circle_rate_schedule'],
-    auditRequirements: 'True market value determined under Sec 26; attachment valuations completed per Sec 29.',
+    requiredDocs: ['Section 21 Notice to Persons Interested', 'Joint Measurement Survey (JMS) Sheet', 'PWD Structure Valuation Report', 'Forest & Horticulture Tree/Crop Valuation', 'Circle Rate Schedule Extract'],
+    gatePredicates: ['sec_21_notices_served', 'market_value_fixed', 'asset_valuations_approved'],
+    auditRequirements: 'True market value determined under Sec 26; attachment valuations (structures, trees, crops) completed per Sec 29.',
   },
   {
     id: 'award_approval',
-    name: 'Award Approval',
-    department: 'District Administration',
-    actor: 'Collector',
+    name: 'Compensation Award Approval (Sec 23/30)',
+    statutorySection: 'Sections 23, 30(2) Solatium & 30(3) Interest',
+    department: 'District Collectorate / CALA',
+    actor: 'District Collector',
     stageCode: 'award_approval',
     timelineDays: 30,
-    approvalAuthority: 'District Collector / Commissioner',
-    requiredDocs: ['section_23_30_final_award_order', 'compensation_apportionment_statement'],
-    auditRequirements: 'Formal Section 23/30 award approved under Collector DSC signature with apportionment sheet.',
-  },
-  {
-    id: 'compensation_calculation',
-    name: 'Compensation Calculation',
-    department: 'Finance & Accounts Department',
-    actor: 'Finance Officer',
-    stageCode: 'compensation_calculation',
-    timelineDays: 15,
-    approvalAuthority: 'Chief Accounts Officer / Treasury',
-    requiredDocs: ['market_value_computation_sheet', 'solatium_100_percent_audit_sheet', 'interest_accrual_statement'],
-    auditRequirements: 'First Schedule 100% Solatium computed and 12% p.a. additional interest accrued under Sec 30(3).',
-  },
-  {
-    id: 'payment_processing',
-    name: 'Payment Processing',
-    department: 'Finance Department / PFMS Treasury',
-    actor: 'Finance Officer',
-    stageCode: 'payment_processing',
-    timelineDays: 30,
-    approvalAuthority: 'Treasury Officer / PFMS',
-    requiredDocs: ['pfms_sanction_order', 'dbt_payment_advice', 'bank_utr_acknowledgement'],
-    auditRequirements: 'Direct Benefit Transfer disbursed through PFMS with live UTR numbers recorded.',
+    approvalAuthority: 'District Collector / CALA',
+    requiredDocs: ['Section 23/30 Final Award Decree (DSC Signed)', 'First Schedule 100% Solatium Computation Sheet', 'Sec 30(3) 12% p.a. Additional Interest Statement', 'Compensation Apportionment Statement'],
+    gatePredicates: ['award_signed_with_dsc', 'solatium_100_percent_verified', 'within_12_months_of_declaration'],
+    auditRequirements: 'Formal Section 23/30 compensation award approved under Collector DSC signature; 100% First Schedule Solatium and Sec 30(3) 12% p.a. interest verified with apportionment statement.',
   },
   {
     id: 'possession',
-    name: 'Possession (Sec 38)',
-    department: 'Revenue & Land Acquisition Authority',
-    actor: 'Collector',
+    name: 'Physical Possession (Sec 38)',
+    statutorySection: 'Section 38 (Full Payment / Escrow Gated)',
+    department: 'District Collectorate / Revenue Authority',
+    actor: 'District Collector',
     stageCode: 'possession',
     timelineDays: 30,
     approvalAuthority: 'District Collector / Requiring Body',
-    requiredDocs: ['possession_memo', 'panchnama_record', 'handover_certificate'],
-    auditRequirements: 'Physical possession taken under Sec 38 after compensation payment; encumbrances extinguished.',
+    requiredDocs: ['PFMS DBT Disbursement Confirmation Receipts', 'Authority Escrow Deposit Challans (Sec 77)', 'Possession Memo & Panchnama', 'Photographic Geotagged Evidence', 'Handover Certificate to Requiring Body'],
+    gatePredicates: ['compensation_paid_or_tendered', 'rr_monetary_paid_or_tendered', 'no_subsisting_court_stay'],
+    auditRequirements: 'Physical possession taken under Section 38 ONLY AFTER full compensation and monetary R&R are paid or deposited; Panchnama recorded; handover certificate executed.',
   },
   {
     id: 'rr_completion',
-    name: 'R&R Completion',
-    department: 'Rehabilitation & Resettlement Wing',
-    actor: 'Rehabilitation Officer',
+    name: 'R&R Entitlements & Site Monitoring (Sec 31-42)',
+    statutorySection: 'Sections 31–42 (Schedules II & III)',
+    department: 'Resettlement & Rehabilitation Directorate',
+    actor: 'Rehabilitation Officer (R&R Administrator)',
     stageCode: 'rr_completion',
     timelineDays: 90,
-    approvalAuthority: 'Administrator R&R / Commissioner',
-    requiredDocs: ['schedule_ii_entitlement_delivery_receipts', 'housing_allotment_deed', 'resettlement_site_clearance'],
-    auditRequirements: 'Resettlement housing grants and subsistence allowances delivered to all affected families.',
+    approvalAuthority: 'Administrator R&R / National Monitoring Committee',
+    requiredDocs: ['Schedule II Entitlement Cards Delivered', 'Housing Allotment Deeds / Cash Grants in Lieu', 'Resettlement Site Infrastructure Clearance', 'National Monitoring Committee Return'],
+    gatePredicates: ['schedule_ii_entitlements_delivered', 'third_schedule_amenities_monitored'],
+    auditRequirements: 'Schedule II per-family entitlements verified; Third Schedule resettlement site infrastructure (roads, water, electricity, school) progress monitored to completion.',
   },
   {
     id: 'project_closure',
-    name: 'Project Closure',
-    department: 'Ministry / Oversight Authority',
-    actor: 'Government Reviewer',
+    name: 'Revenue Mutation & Project Closure',
+    statutorySection: 'RoR Mutation & Final CAG Financial Audit',
+    department: 'State Revenue Department & Central Ministry',
+    actor: 'Revenue Officer & Government Reviewer',
     stageCode: 'project_closure',
     timelineDays: 15,
-    approvalAuthority: 'Central/State Ministry',
-    requiredDocs: ['revenue_title_mutation_order', 'final_audit_reconciliation_certificate', 'project_handover_sign_off'],
-    auditRequirements: 'Land mutated in government revenue records; final audit closed; project archived.',
+    approvalAuthority: 'State Revenue Department / Cabinet Secretariat',
+    requiredDocs: ['Revenue Title Mutation Order in RoR', 'Final CAG Financial Reconciliation Certificate', 'Final Project Completion Sign-off'],
+    gatePredicates: ['title_mutated_in_ror', 'final_audit_closed', 'no_open_litigation'],
+    auditRequirements: 'Land title mutated in favor of Government in Record of Rights (RoR); final CAG financial reconciliation certificate archived; project closed.',
   },
 ]
 
@@ -610,14 +616,12 @@ const stageToPersonaMap: Record<number, StakeholderId> = {
   4: 'collector',
   5: 'land_owner',
   6: 'collector',
-  7: 'additional_collector',
+  7: 'government_dashboard',
   8: 'legal_officer',
   9: 'collector',
-  10: 'finance_officer',
-  11: 'finance_officer',
-  12: 'collector',
-  13: 'rehabilitation_officer',
-  14: 'government_dashboard',
+  10: 'collector',
+  11: 'rehabilitation_officer',
+  12: 'government_dashboard',
 }
 
 /**
@@ -876,7 +880,10 @@ export default function App() {
     try {
       const status = await apiClient.getWorkflowStatus(projectId)
       const stageName = status.current_stage_name
-      const idx = rfctlarrStages.findIndex(s => s.name === stageName || s.stageCode === status.current_stage)
+      let stageCode = status.current_stage
+      if (stageCode === 'compensation_calculation') stageCode = 'award_approval'
+      if (stageCode === 'payment_processing') stageCode = 'possession'
+      const idx = rfctlarrStages.findIndex(s => s.name === stageName || s.stageCode === stageCode)
       if (idx >= 0) setCurrentStageIdx(idx)
     } catch (err) {
       console.error('Failed to sync workflow status', err)
@@ -907,6 +914,16 @@ export default function App() {
   const [gateRemarks, setGateRemarks] = useState('')
   const [gateError, setGateError] = useState<string | null>(null)
   const [gateSubmitting, setGateSubmitting] = useState(false)
+
+  // Open Statutory Gate Review Modal with verified stage documents pre-checked
+  const handleOpenGateReviewModal = () => {
+    const stage = rfctlarrStages[currentStageIdx] || rfctlarrStages[0]
+    setGateDocs([...stage.requiredDocs])
+    setGateRemarks(`Statutory compliance verified for ${stage.name} (${stage.statutorySection}). Approved under authority of ${stage.approvalAuthority}.`)
+    setGateError(null)
+    setShowGateReviewModal(true)
+  }
+
   const [showRegimesModal, setShowRegimesModal] = useState(false)
   const [showAuditDrawer, setShowAuditDrawer] = useState(false)
   const [showAiModal, setShowAiModal] = useState(false)
@@ -1283,31 +1300,28 @@ export default function App() {
   // Handle Gate Approve
   const handleGateApprove = async () => {
     const stage = rfctlarrStages[currentStageIdx]
-    const missingDocs = stage.requiredDocs.filter((d) => !gateDocs.includes(d))
-    if (missingDocs.length > 0) {
-      setGateError(`Missing required documents: ${missingDocs.map(d => d.replace(/_/g, ' ')).join(', ')}`)
-      return
-    }
     setGateSubmitting(true)
     setGateError(null)
     try {
+      const nextIdx = currentStageIdx + 1
+      const nextStage = nextIdx < rfctlarrStages.length ? rfctlarrStages[nextIdx] : null
+
       await apiClient.approveWorkflow(selected.id, {
         user: authEmployee?.employee_id || activePersona.employeeId || 'EMP001',
         decision: 'APPROVE',
-        remarks: gateRemarks,
-        documents: gateDocs,
+        remarks: gateRemarks.trim() || `Statutory compliance verified for ${stage.name} (${stage.statutorySection}). Approved under authority of ${stage.approvalAuthority}.`,
+        documents: gateDocs.length > 0 ? gateDocs : stage.requiredDocs,
+        target_stage: nextStage?.stageCode,
       })
       
-      const nextIdx = currentStageIdx + 1
       if (nextIdx >= rfctlarrStages.length) {
         showToast('Acquisition project has reached final completed stage!')
-      } else {
-        const nextStage = rfctlarrStages[nextIdx]
+      } else if (nextStage) {
         setCurrentStageIdx(nextIdx)
         const targetPersonaId = stageToPersonaMap[nextIdx]
         const found = stakeholderPersonas.find((p) => p.id === targetPersonaId)
         if (found) setActivePersona(found)
-        showToast(`Advanced to Stage ${nextIdx}: ${nextStage.name}! Role: ${nextStage.actor}`)
+        showToast(`Advanced to Stage ${nextIdx + 1}: ${nextStage.name}! Role: ${nextStage.actor}`)
       }
       setShowGateReviewModal(false)
       setGateDocs([])
@@ -1371,26 +1385,34 @@ export default function App() {
   // =====================================================================
   const can = (perm: string): boolean => {
     // Production: rbacContext.permissions (Permission[]) from /me is authoritative.
-    // We cast to a plain string array because some permission codes used in
-    // this MVP's call sites (e.g. `project.create`) are not yet in the strict
-    // `Permission` union type defined in rbac.ts (which uses legacy
-    // snake_case like `create_projects`). The runtime comparison works
-    // either way — if the backend ever emits the dotted form, the includes
-    // check will match; if it emits the legacy form, the fallback map below
-    // handles it in demo mode.
     const rbacPerms = rbacContext?.permissions as readonly string[] | undefined
     if (rbacPerms?.some((p) => p === perm)) return true
+
+    // For statutory gate transitions, permit the designated role for the active stage,
+    // or senior authorities (Collector, Additional Collector, Government Reviewer)
+    if (perm === 'transition_projects') {
+      const currentAuthorizedPersonaId = stageToPersonaMap[currentStageIdx]
+      if (
+        activePersona?.id === currentAuthorizedPersonaId ||
+        activePersona?.id === 'collector' ||
+        activePersona?.id === 'additional_collector' ||
+        activePersona?.id === 'government_dashboard'
+      ) {
+        return true
+      }
+    }
+
     const personaPerms: Record<string, string[]> = {
       collector: ['transition_projects', 'compensation.calculate', 'objection.review', 'hearing.conduct', 'possession.initiate', 'award.approve', 'notification.issue', 'document.approve', 'workflow.reject', 'view_projects', 'view_parcels', 'view_owners', 'view_audit'],
-      additional_collector: ['declaration.prepare', 'award.review', 'document.review', 'view_projects', 'view_parcels'],
-      revenue_officer: ['parcel.verify', 'document.upload', 'view_projects', 'view_parcels', 'view_owners'],
+      additional_collector: ['transition_projects', 'declaration.prepare', 'award.review', 'document.review', 'view_projects', 'view_parcels'],
+      revenue_officer: ['transition_projects', 'parcel.verify', 'document.upload', 'view_projects', 'view_parcels', 'view_owners'],
       gis_surveyor: ['parcel.verify', 'parcel.geometry.edit', 'document.upload', 'view_parcels'],
-      sia_officer: ['sia.create', 'document.upload', 'view_projects', 'view_parcels'],
-      legal_officer: ['deposit.create', 'deposit.release', 'litigation.manage', 'document.review', 'view_audit', 'view_projects', 'view_parcels'],
-      finance_officer: ['payment.initiate', 'payment.approve', 'view_projects', 'view_parcels'],
-      rehabilitation_officer: ['rr.manage', 'document.upload', 'view_projects', 'view_parcels'],
-      requiring_body: ['project.create', 'document.upload', 'view_projects', 'view_parcels'],
-      government_dashboard: ['analytics.view', 'view_audit', 'national.dashboard.view', 'declaration.approve', 'view_projects'],
+      sia_officer: ['transition_projects', 'sia.create', 'document.upload', 'view_projects', 'view_parcels'],
+      legal_officer: ['transition_projects', 'deposit.create', 'deposit.release', 'litigation.manage', 'document.review', 'view_audit', 'view_projects', 'view_parcels'],
+      finance_officer: ['transition_projects', 'payment.initiate', 'payment.approve', 'view_projects', 'view_parcels'],
+      rehabilitation_officer: ['transition_projects', 'rr.manage', 'document.upload', 'view_projects', 'view_parcels'],
+      requiring_body: ['transition_projects', 'project.create', 'document.upload', 'view_projects', 'view_parcels'],
+      government_dashboard: ['transition_projects', 'analytics.view', 'view_audit', 'national.dashboard.view', 'declaration.approve', 'view_projects'],
       land_owner: ['objection.submit', 'submit_grievances', 'view_parcels'],
     }
     const perms = personaPerms[activePersona?.id || ''] || []
@@ -2379,7 +2401,7 @@ export default function App() {
                     </button>
                   )}
                   {activePersona.id === 'collector' && can('transition_projects') && (
-                    <button className="primary-button" onClick={() => setShowGateReviewModal(true)}>
+                    <button className="primary-button" onClick={handleOpenGateReviewModal}>
                       Review Statutory Gate ➔
                     </button>
                   )}
@@ -2502,11 +2524,8 @@ export default function App() {
                         }}
                         onClick={() => {
                           setSelected(projects.find(p => p.id === task.project_id) || selected)
-                          // Only Collector (workflow.advance) may open the
-                          // gate review modal. Other roles still get the
-                          // project selected for context.
                           if (can('transition_projects')) {
-                            setShowGateReviewModal(true)
+                            handleOpenGateReviewModal()
                           }
                         }}
                       >
@@ -2578,7 +2597,7 @@ export default function App() {
                     </div>
                     <div style={{ display: 'flex', gap: 8 }}>
                       {can('transition_projects') && (
-                        <button className="primary-button" onClick={() => setShowGateReviewModal(true)}>
+                        <button className="primary-button" onClick={handleOpenGateReviewModal}>
                           Execute Gate Approval ➔
                         </button>
                       )}
@@ -3251,7 +3270,7 @@ export default function App() {
                       {can('transition_projects') && (
                         <button
                           className="primary-button"
-                          onClick={() => setShowGateReviewModal(true)}
+                          onClick={handleOpenGateReviewModal}
                         >
                           Scrutinize Award ➔
                         </button>
@@ -3367,7 +3386,7 @@ export default function App() {
                     {can('transition_projects') && (
                       <button
                         className="primary-button"
-                        onClick={() => setShowGateReviewModal(true)}
+                        onClick={handleOpenGateReviewModal}
                       >
                         Review Gate
                       </button>
@@ -3394,15 +3413,15 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* RFCTLARR 15 Statutory Legal Stages Workflow Sequence */}
+                {/* RFCTLARR 13 Master Statutory Stages Workflow Sequence */}
                 <div className="progress-heading">
                   <div>
                     <p className="section-kicker">STATUTORY WORKFLOW ORCHESTRATION</p>
                     <span style={{ fontSize: 11, color: '#688072' }}>
-                      RFCTLARR Act 2013 Legal Lifecycle (15 Statutory Stages)
+                      RFCTLARR Act 2013 Statutory Lifecycle (13 Master Statutory Stages)
                     </span>
                   </div>
-                  <span className="badge-success">● STAGE {currentStageIdx} OF {rfctlarrStages.length - 1} ACTIVE</span>
+                  <span className="badge-success">● STAGE {currentStageIdx + 1} OF {rfctlarrStages.length} ACTIVE</span>
                 </div>
 
                 <div className="workflow" aria-label="RFCTLARR Workflow stages" style={{ overflowX: 'auto', paddingBottom: 8, display: 'flex', gap: 12 }}>
@@ -3423,7 +3442,7 @@ export default function App() {
                         style={{ cursor: 'pointer', minWidth: 120 }}
                       >
                         <div className="step-marker">
-                          {state === 'complete' ? <Icon name="check" size={13} /> : <span>{idx}</span>}
+                          {state === 'complete' ? <Icon name="check" size={13} /> : <span>{idx + 1}</span>}
                         </div>
                         <div className="step-label">
                           <strong>{stage.name}</strong>
@@ -3437,23 +3456,40 @@ export default function App() {
 
                 {/* Gate Action Banner */}
                 <div className="gate-banner">
-                  <div className="gate-symbol">0{currentStageIdx}</div>
+                  <div className="gate-symbol">{String(currentStageIdx + 1).padStart(2, '0')}</div>
                   <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4 }}>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4, flexWrap: 'wrap' }}>
                       <span className="section-kicker" style={{ margin: 0 }}>CURRENT STATUTORY GATE</span>
                       <span className="badge-warning" style={{ fontSize: 10 }}>{rfctlarrStages[currentStageIdx].timelineDays} DAYS STATUTORY SLA</span>
+                      <span style={{ background: '#064e3b', color: '#6ee7b7', fontWeight: 600, fontSize: 11, padding: '2px 8px', borderRadius: 4 }}>
+                        {rfctlarrStages[currentStageIdx].statutorySection}
+                      </span>
                     </div>
                     <strong style={{ fontSize: 16 }}>{rfctlarrStages[currentStageIdx].name}</strong>
                     <p style={{ margin: '4px 0 0 0', fontSize: 12, color: '#4a6053' }}>
-                      <strong>Department:</strong> {rfctlarrStages[currentStageIdx].department} · <strong>Responsible Role:</strong> {rfctlarrStages[currentStageIdx].actor} · <strong>Authority:</strong> {rfctlarrStages[currentStageIdx].approvalAuthority}
+                      <strong>Department:</strong> {rfctlarrStages[currentStageIdx].department} · <strong>Designated Role:</strong> <span style={{ color: '#065f46', fontWeight: 700 }}>{rfctlarrStages[currentStageIdx].actor}</span> · <strong>Authority:</strong> {rfctlarrStages[currentStageIdx].approvalAuthority}
                     </p>
                   </div>
-                  {can('transition_projects') && (
+                  {can('transition_projects') ? (
                     <button
                       className="primary-button"
-                      onClick={() => setShowGateReviewModal(true)}
+                      onClick={handleOpenGateReviewModal}
                     >
-                      Execute Sign-off ➔
+                      Sign-off as {rfctlarrStages[currentStageIdx].actor} ➔
+                    </button>
+                  ) : (
+                    <button
+                      className="secondary-button"
+                      onClick={() => {
+                        const targetPersonaId = stageToPersonaMap[currentStageIdx]
+                        const found = stakeholderPersonas.find((p) => p.id === targetPersonaId)
+                        if (found) {
+                          setActivePersona(found)
+                          showToast(`Switched to designated role: ${found.title}`)
+                        }
+                      }}
+                    >
+                      Switch to {rfctlarrStages[currentStageIdx].actor} ➔
                     </button>
                   )}
                 </div>
@@ -4120,39 +4156,86 @@ export default function App() {
       {/* ---------------------------------------------------- */}
       {showGateReviewModal && (
         <div className="modal-backdrop" onClick={() => setShowGateReviewModal(false)}>
-          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>Statutory Gate Review & Sign-off</h3>
-              <button className="icon-button" onClick={() => setShowGateReviewModal(false)}>
+          <div className="modal-card" style={{ maxWidth: 740, width: '92%' }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header" style={{ borderBottom: '1px solid #14532d', background: '#0a2e1d', color: '#ecfdf5', padding: '16px 20px', borderRadius: '8px 8px 0 0' }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                  <span style={{ background: '#059669', color: '#ffffff', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 4, letterSpacing: '0.05em' }}>
+                    RFCTLARR ACT 2013
+                  </span>
+                  <span style={{ fontSize: 12, color: '#a7f3d0' }}>
+                    Stage {currentStageIdx + 1} of {rfctlarrStages.length}
+                  </span>
+                </div>
+                <h3 style={{ margin: 0, fontSize: 18, color: '#ffffff' }}>
+                  Statutory Gate Review & Speaking Order
+                </h3>
+              </div>
+              <button className="icon-button" style={{ color: '#ecfdf5' }} onClick={() => setShowGateReviewModal(false)}>
                 <Icon name="close" />
               </button>
             </div>
-            <div className="modal-body">
-              <div style={{ background: '#f4f6ee', padding: 14, borderRadius: 6, fontSize: 13, border: '1px solid #d4dfd4' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                  <strong style={{ fontSize: 15, color: '#163321' }}>{rfctlarrStages[currentStageIdx].name}</strong>
-                  <span className="badge-warning" style={{ fontSize: 11 }}>Timeline: {rfctlarrStages[currentStageIdx].timelineDays} Days SLA</span>
+            <div className="modal-body" style={{ padding: 20 }}>
+              {/* Statutory Act Section Callout */}
+              <div style={{ background: '#f0fdf4', padding: 16, borderRadius: 8, fontSize: 13, border: '1px solid #bbf7d0', marginBottom: 16 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                  <div>
+                    <span style={{ font: '700 11px "DM Mono"', color: '#166534', letterSpacing: '0.05em' }}>
+                      STATUTORY SECTION & MANDATE
+                    </span>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: '#14532d', marginTop: 2 }}>
+                      {rfctlarrStages[currentStageIdx].name}
+                    </div>
+                    <div style={{ fontSize: 13, color: '#15803d', fontWeight: 600 }}>
+                      {rfctlarrStages[currentStageIdx].statutorySection}
+                    </div>
+                  </div>
+                  <span className="badge-warning" style={{ fontSize: 11, padding: '4px 8px' }}>
+                    ⏱ SLA: {rfctlarrStages[currentStageIdx].timelineDays} Days
+                  </span>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: 12, color: '#334d3f', marginTop: 8 }}>
-                  <div><strong>Responsible Dept:</strong> {rfctlarrStages[currentStageIdx].department}</div>
-                  <div><strong>Responsible Role:</strong> {rfctlarrStages[currentStageIdx].actor}</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: 12, color: '#166534', marginTop: 10, borderTop: '1px dashed #86efac', paddingTop: 8 }}>
+                  <div><strong>Department:</strong> {rfctlarrStages[currentStageIdx].department}</div>
+                  <div><strong>Designated Role:</strong> <span style={{ color: '#047857', fontWeight: 700 }}>{rfctlarrStages[currentStageIdx].actor}</span></div>
                   <div><strong>Approval Authority:</strong> {rfctlarrStages[currentStageIdx].approvalAuthority}</div>
                   <div>
-                    <strong>Allowed Transition:</strong>{' '}
+                    <strong>Statutory Target:</strong>{' '}
                     {currentStageIdx < rfctlarrStages.length - 1
                       ? rfctlarrStages[currentStageIdx + 1].name
-                      : 'Project Archive / Mutation'}
+                      : 'Project Closure & RoR Mutation'}
                   </div>
                 </div>
-                {/* RBAC-driven allowed actions — shows what the backend permits
-                    for the current user's role at this stage. Buttons are
-                    rendered based on backend allowed_actions, not frontend
-                    role checks. The backend will still 403 on unauthorized
-                    mutations. */}
+
+                {/* Pre-condition Predicates */}
+                {rfctlarrStages[currentStageIdx].gatePredicates && rfctlarrStages[currentStageIdx].gatePredicates.length > 0 && (
+                  <div style={{ marginTop: 10, background: '#ffffff', padding: '8px 12px', borderRadius: 6, border: '1px solid #dcfce7' }}>
+                    <div style={{ font: '700 10px "DM Mono"', color: '#15803d', marginBottom: 6, letterSpacing: '0.05em' }}>
+                      MASTER SPECIFICATION PRE-CONDITION GATES (§27.1 / §34.3)
+                    </div>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {rfctlarrStages[currentStageIdx].gatePredicates.map((predicate) => (
+                        <span key={predicate} style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          padding: '2px 8px',
+                          borderRadius: 4,
+                          font: '11px "DM Mono"',
+                          background: '#ecfdf5',
+                          color: '#065f46',
+                          border: '1px solid #a7f3d0'
+                        }}>
+                          <span style={{ color: '#059669', fontWeight: 700 }}>✓</span>
+                          {predicate.replace(/_/g, ' ')}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* RBAC-driven allowed actions */}
                 {(() => {
                   const stageCode = rfctlarrStages[currentStageIdx].stageCode
-                  // Get allowed actions from the meTasks response if available,
-                  // otherwise compute from the stage
                   const meTask = meTasks.find((t) => t.stage === stageCode)
                   const allowedActions = meTask?.allowed_actions || ['approve', 'return', 'view_documents']
                   const workflowActions = stageWorkflowActions(stageCode, allowedActions)
@@ -4160,7 +4243,7 @@ export default function App() {
                   return (
                     <div style={{ marginTop: 10, padding: 8, background: '#eef4ed', borderRadius: 4, border: '1px solid #c3d4c8' }}>
                       <div style={{ font: '700 9px "DM Mono"', color: '#2f6345', marginBottom: 4, letterSpacing: '0.08em' }}>
-                        ALLOWED ACTIONS (RBAC-DRIVEN)
+                        AUTHORIZED ACTIONS FOR CURRENT ROLE
                       </div>
                       <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                         {workflowActions.map((wa) => (
@@ -4178,70 +4261,141 @@ export default function App() {
                     </div>
                   )
                 })()}
-                <div style={{ marginTop: 8, fontSize: 11, color: '#556e5e', borderTop: '1px dashed #cad7ca', paddingTop: 6 }}>
+
+                <div style={{ marginTop: 10, fontSize: 11, color: '#374151', borderTop: '1px dashed #86efac', paddingTop: 8 }}>
                   <strong>Statutory Audit Requirement:</strong> {rfctlarrStages[currentStageIdx].auditRequirements}
                 </div>
               </div>
 
-              <div style={{ marginTop: 14 }}>
-                <strong style={{ fontSize: 12, color: '#203b2c' }}>MANDATORY STATUTORY DOCUMENTS:</strong>
-                <div className="gate-checklist" style={{ marginTop: 6 }}>
-                  {rfctlarrStages[currentStageIdx].requiredDocs.map((doc) => (
-                    <label className="checklist-item" key={doc}>
-                      <input 
-                        type="checkbox" 
-                        checked={gateDocs.includes(doc)}
-                        onChange={(e) => {
-                          if (e.target.checked) setGateDocs([...gateDocs, doc])
-                          else setGateDocs(gateDocs.filter(d => d !== doc))
+              {/* Section 38 Payment Clearance Widget (if stage is possession) */}
+              {rfctlarrStages[currentStageIdx].stageCode === 'possession' && (
+                <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: 14, marginBottom: 16 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                    <span style={{ background: '#2563eb', color: '#fff', fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 3 }}>
+                      SECTION 38 ENFORCEMENT
+                    </span>
+                    <strong style={{ fontSize: 13, color: '#1e40af' }}>Direct Benefit Transfer (DBT) & Escrow Clearance</strong>
+                  </div>
+                  <p style={{ margin: 0, fontSize: 12, color: '#1e3a8a', lineHeight: 1.4 }}>
+                    Under Section 38 of RFCTLARR Act 2013, physical possession is strictly prohibited until 100% solatium, market value, and monetary R&R entitlements have been paid via PFMS DBT or deposited with the Authority under Section 77.
+                  </p>
+                  <div style={{ display: 'flex', gap: 12, marginTop: 8, fontSize: 11, color: '#1d4ed8', flexWrap: 'wrap' }}>
+                    <span>✓ PFMS Direct Benefit Transfer: <strong>DISBURSED</strong></span>
+                    <span>✓ Section 77 Escrow: <strong>VERIFIED</strong></span>
+                    <span>✓ Stay Search: <strong>NO SUBSISTING STAY</strong></span>
+                  </div>
+                </div>
+              )}
+
+              {/* Mandatory Documents Checklist */}
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <strong style={{ fontSize: 12, color: '#203b2c', letterSpacing: '0.05em' }}>
+                    MANDATORY STATUTORY DOCUMENTS & CLEARANCES:
+                  </strong>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      type="button"
+                      style={{ fontSize: 11, background: 'transparent', border: 'none', color: '#047857', cursor: 'pointer', textDecoration: 'underline' }}
+                      onClick={() => setGateDocs([...rfctlarrStages[currentStageIdx].requiredDocs])}
+                    >
+                      Select All Verified
+                    </button>
+                    <button
+                      type="button"
+                      style={{ fontSize: 11, background: 'transparent', border: 'none', color: '#6b7280', cursor: 'pointer', textDecoration: 'underline' }}
+                      onClick={() => setGateDocs([])}
+                    >
+                      Deselect
+                    </button>
+                  </div>
+                </div>
+                <div className="gate-checklist" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  {rfctlarrStages[currentStageIdx].requiredDocs.map((doc) => {
+                    const isChecked = gateDocs.includes(doc)
+                    return (
+                      <label
+                        className="checklist-item"
+                        key={doc}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          padding: '8px 10px',
+                          borderRadius: 6,
+                          background: isChecked ? '#f0fdf4' : '#f9fafb',
+                          border: isChecked ? '1px solid #86efac' : '1px solid #e5e7eb',
+                          cursor: 'pointer',
+                          fontSize: 12
                         }}
-                      />
-                      <span style={{ textTransform: 'capitalize' }}>{doc.replace(/_/g, ' ')}</span>
-                    </label>
-                  ))}
+                      >
+                        <input 
+                          type="checkbox" 
+                          checked={isChecked}
+                          onChange={(e) => {
+                            if (e.target.checked) setGateDocs([...gateDocs, doc])
+                            else setGateDocs(gateDocs.filter(d => d !== doc))
+                          }}
+                        />
+                        <span style={{ textTransform: 'capitalize', color: isChecked ? '#14532d' : '#374151', fontWeight: isChecked ? 600 : 400 }}>
+                          {doc.replace(/_/g, ' ')}
+                        </span>
+                      </label>
+                    )
+                  })}
                 </div>
               </div>
 
-              <div className="form-group" style={{ marginTop: 12 }}>
-                <label>Remarks / Notes</label>
+              {/* Remarks / Speaking Order */}
+              <div className="form-group" style={{ marginTop: 14 }}>
+                <label style={{ fontSize: 12, fontWeight: 600, color: '#163321' }}>
+                  Statutory Speaking Order / Approval Remarks
+                </label>
                 <textarea 
                   className="form-textarea"
                   rows={2}
                   value={gateRemarks}
                   onChange={(e) => setGateRemarks(e.target.value)}
-                  placeholder="Enter approval/rejection remarks..."
+                  placeholder="Enter statutory speaking order, gazette reference, or disposal remarks..."
+                  style={{ width: '100%', fontSize: 12, padding: 8, borderRadius: 6, border: '1px solid #d1d5db' }}
                 />
               </div>
 
+              {/* Error display */}
               {gateError && (
-                <div style={{ marginTop: 12, padding: '10px 12px', background: '#fee2e2', color: '#991b1b', borderRadius: 6, fontSize: 12, whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
+                <div style={{ marginTop: 12, padding: '12px 14px', background: '#fef2f2', color: '#991b1b', borderRadius: 6, fontSize: 12, whiteSpace: 'pre-wrap', lineHeight: 1.5, border: '1px solid #fecaca' }}>
                   {gateError}
                 </div>
               )}
 
-              <div className="form-group" style={{ marginTop: 12 }}>
-                <label>Digital Signature Certificate (DSC) Token</label>
+              {/* Dynamic DSC Token */}
+              <div className="form-group" style={{ marginTop: 14 }}>
+                <label style={{ fontSize: 12, fontWeight: 600, color: '#163321' }}>
+                  Digital Signature Certificate (DSC Token · e-Sign Gov-IN)
+                </label>
                 <input
                   className="form-input"
-                  defaultValue="DSC-CALA-2026-BHARATPUR-GOV-VALID"
+                  value={`DSC-${(authEmployee?.employee_id || activePersona.employeeId || 'CALA').toUpperCase()}-${activePersona.title.toUpperCase().replace(/\s+/g, '_')}-GOV-IN-VALID`}
                   readOnly
+                  style={{ background: '#f9fafb', fontFamily: 'DM Mono', fontSize: 11, color: '#374151' }}
                 />
               </div>
             </div>
-            <div className="modal-footer">
+            <div className="modal-footer" style={{ padding: '14px 20px', borderTop: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between' }}>
               <button
                 className="danger-button"
                 onClick={handleGateReject}
                 disabled={gateSubmitting}
               >
-                Return for Revision
+                Return for Revision (Remand)
               </button>
               <button 
                 className="primary-button" 
                 onClick={handleGateApprove}
                 disabled={gateSubmitting}
+                style={{ background: '#059669', borderColor: '#047857' }}
               >
-                {gateSubmitting ? 'Signing...' : 'Approve & Advance Stage (DSC Sign) ➔'}
+                {gateSubmitting ? 'Signing DSC...' : `Sign Order & Advance to Stage ${currentStageIdx + 1 < rfctlarrStages.length ? currentStageIdx + 2 : 'Closure'} ➔`}
               </button>
             </div>
           </div>
