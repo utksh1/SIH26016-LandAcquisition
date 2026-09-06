@@ -1081,6 +1081,14 @@ pub struct CreateProjectRequest {
     pub authority: Authority,
     pub state_code: String,
     pub district_code: String,
+    #[serde(default)]
+    pub requiring_body: Option<String>,
+    #[serde(default)]
+    pub estimated_budget_cr: Option<f64>,
+    #[serde(default)]
+    pub total_area_hectares: Option<f64>,
+    #[serde(default)]
+    pub initial_parcels_count: Option<usize>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -1228,6 +1236,36 @@ async fn create_project(
         ));
     }
     authorize_create(&actor, &request.state_code, &request.district_code)?;
+
+    let parcel_count = request.initial_parcels_count.unwrap_or(18).max(5);
+    let mut parcels = Vec::with_capacity(parcel_count);
+    let sample_owners = [
+        "Rameshwar Rao Patil",
+        "Sunita Devi Sharma",
+        "Mohammad Rafiq Sheikh",
+        "Anand Kumar Reddy",
+        "Bhupendra Singh Tanwar",
+        "Kaveri Bai Gond",
+        "Devendra Pratap Yadav",
+        "Lakshmi Narayana Verma",
+        "Gurpreet Singh Dhillon",
+        "Shailesh Bhai Patel",
+        "Parvati Ammal",
+        "Manohar Lal Meena",
+    ];
+    let district = &request.district_code;
+    for i in 1..=parcel_count {
+        let owner = sample_owners[(i - 1) % sample_owners.len()];
+        let area = 0.45 + ((i as f64 * 0.37) % 2.5);
+        parcels.push(Parcel {
+            id: Uuid::new_v4(),
+            survey_number: format!("{}/{}", 1040 + i, (i % 3) + 1),
+            owner_name: owner.to_string(),
+            area_hectares: (area * 100.0).round() / 100.0,
+            district_code: district.clone(),
+        });
+    }
+
     let project = Project {
         id: Uuid::new_v4(),
         name: request.name,
@@ -1235,16 +1273,18 @@ async fn create_project(
         state_code: request.state_code,
         district_code: request.district_code,
         stage: ProjectStage::Draft,
-        parcels: Vec::new(),
+        parcels,
         preliminary_notification_at: None,
         updated_at: Utc::now(),
     };
 
     // If live DB pool exists, try to persist
-    if let Some(ref pool) = state.pool {
+    let db_wf_id = if let Some(ref pool) = state.pool {
         let _ = state.project_repo.save_project_async(&project).await;
-        let _ = initialize_workflow(pool, project.id, project.authority).await;
-    }
+        initialize_workflow(pool, project.id, project.authority).await.ok().map(|w| w.id)
+    } else {
+        None
+    };
 
     // Always update in-memory store. Scope the write lock so it is released
     // before the audit-log append below — std::sync::RwLockWriteGuard is !Send
@@ -1253,7 +1293,7 @@ async fn create_project(
     {
         let mut in_mem = state.in_memory.write().unwrap();
         in_mem.projects.insert(project.id, project.clone());
-        let w_id = Uuid::new_v4();
+        let w_id = db_wf_id.unwrap_or_else(Uuid::new_v4);
         let init_handler = sih_workflow::who_handles_stage(&ProjectStage::ProposalInitiation);
         let init_deadline = Some(Utc::now() + chrono::Duration::days(init_handler.timeline_days as i64));
         let workflow = WorkflowInstance {
@@ -1272,6 +1312,26 @@ async fn create_project(
         };
         in_mem.workflows.insert(w_id, workflow);
         in_mem.project_to_workflow.insert(project.id, w_id);
+
+        // Seed initial statutory proposal documents required for Stage 1 RFCTLARR compliance
+        let initial_docs = [
+            ("dpr_feasibility_report", "DPR_Feasibility_Report_Signed.pdf"),
+            ("alignment_shapefile", "Corridor_Alignment_Boundary.geojson"),
+            ("village_survey_list", "Village_Cadastral_Survey_Schedule.xlsx"),
+            ("budget_sanction", "Administrative_Budget_Sanction_Order.pdf"),
+        ];
+        for (kind, file_name) in initial_docs {
+            in_mem.documents.push(DocumentRecord {
+                id: Uuid::new_v4(),
+                project_id: project.id,
+                kind: kind.to_string(),
+                file_name: file_name.to_string(),
+                content_hash: format!("sha256-{:x}", project.id),
+                version: 1,
+                signed_by: format!("REQ-BODY-{}", actor.id),
+                uploaded_at: Utc::now(),
+            });
+        }
     }
 
     // Cryptographic audit log entry. previous_hash is read FROM THE DATABASE
@@ -1659,6 +1719,76 @@ fn resolve_workflow_instance(
     Err(ApiError::NotFound(format!("Workflow instance not found for ID '{}'", id_str)))
 }
 
+async fn resolve_workflow_and_populate(
+    state: &AppState,
+    id_str: &str,
+) -> Result<(Uuid, Uuid, ProjectStage), ApiError> {
+    {
+        let in_mem = state.in_memory.read().unwrap();
+        if let Ok(w_id) = resolve_workflow_instance(&in_mem, id_str) {
+            if let Some(inst) = in_mem.workflows.get(&w_id) {
+                return Ok((w_id, inst.project_id, inst.current_stage));
+            }
+        }
+    }
+
+    if let Some(ref pool) = state.pool {
+        let parsed = Uuid::parse_str(id_str).ok();
+        use sqlx::Row;
+        let row = if let Some(uid) = parsed {
+            sqlx::query(
+                "SELECT id, project_id, current_stage, authority::text as authority 
+                 FROM workflow_instance WHERE id = $1 OR project_id = $1"
+            )
+            .bind(uid)
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| ApiError::BadRequest(format!("Failed to query workflow_instance: {e}")))?
+        } else {
+            None
+        };
+
+        if let Some(row) = row {
+            let w_id: Uuid = row.get("id");
+            let p_id: Uuid = row.get("project_id");
+            let st_str: String = row.get("current_stage");
+            let auth_str: String = row.get("authority");
+            let c_stage = sih_workflow::db_code_to_stage(&st_str);
+            let auth = if auth_str == "national_highways" {
+                Authority::NationalHighways
+            } else {
+                Authority::Larr
+            };
+            let handler = sih_workflow::who_handles_stage(&c_stage);
+
+            let mut in_mem = state.in_memory.write().unwrap();
+            in_mem.project_to_workflow.insert(p_id, w_id);
+            if !in_mem.workflows.contains_key(&w_id) {
+                in_mem.workflows.insert(w_id, WorkflowInstance {
+                    id: w_id,
+                    project_id: p_id,
+                    authority: auth,
+                    current_stage: c_stage,
+                    started_at: Utc::now(),
+                    notification_at: None,
+                    deadline_at: Some(Utc::now() + chrono::Duration::days(handler.timeline_days as i64)),
+                    completed_at: None,
+                    lapsed_at: None,
+                    responsible_department: Some(handler.department_code.to_string()),
+                    responsible_role: Some(handler.role_code.to_string()),
+                    stage_timeline_days: Some(handler.timeline_days),
+                });
+            }
+            return Ok((w_id, p_id, c_stage));
+        }
+    }
+
+    let in_mem = state.in_memory.read().unwrap();
+    let w_id = resolve_workflow_instance(&in_mem, id_str)?;
+    let inst = in_mem.workflows.get(&w_id).ok_or_else(|| ApiError::NotFound(format!("Workflow not found for ID '{w_id}'")))?;
+    Ok((w_id, inst.project_id, inst.current_stage))
+}
+
 fn resolve_actor_details(
     in_mem: &InMemoryStore,
     user_str: &str,
@@ -1702,6 +1832,126 @@ fn is_role_authorized(actor_role: &str, responsible_role: &str) -> bool {
     false
 }
 
+fn matches_statutory_doc(required_key: &str, submitted_name: &str) -> bool {
+    let req_norm = required_key.to_lowercase().replace(['_', '-', ' ', '(', ')', '/', '.'], "");
+    let sub_norm = submitted_name.to_lowercase().replace(['_', '-', ' ', '(', ')', '/', '.'], "");
+
+    if sub_norm.contains(&req_norm) || req_norm.contains(&sub_norm) {
+        return true;
+    }
+
+    let aliases: &[&str] = match required_key {
+        "dpr_feasibility_report" => &["dpr", "feasibility", "detailedprojectreport", "projectreport", "alignment"],
+        "alignment_shapefile" => &["alignment", "corridor", "shapefile", "kml", "geojson", "geometry"],
+        "village_survey_list" => &["villagesurvey", "survey", "schedule", "cadastralschedule", "landownerlist"],
+        "budget_sanction" => &["budget", "sanction", "administrativeapproval", "financialsanction", "order"],
+        "cadastral_map" => &["cadastral", "mapsheet", "khasra", "villagemap"],
+        "jamabandi_ror_extract" => &["jamabandi", "ror", "recordofrights", "titleverification", "extract", "khatauni"],
+        "dilrmp_sync_record" => &["dilrmp", "syncrecord", "digitalindia", "landrecordsync", "sync"],
+        "sia_terms_of_reference" => &["siaterms", "tor", "termsofreference", "siastudy"],
+        "public_consultation_notice" => &["consultation", "publicconsultation", "publichearing", "notice", "consultationnotice", "gramsabha"],
+        "census_agency_moa" => &["census", "baselinecensus", "agency", "moa", "affectedfamilies"],
+        "sia_study_report" => &["siafinal", "siastudy", "studyreport", "finalreport", "siareport"],
+        "social_impact_management_plan" => &["simp", "managementplan", "socialimpactmanagement", "socialimpact"],
+        "expert_group_recommendation" => &["expertgroup", "appraisal", "recommendation", "expert", "sec8", "publicpurpose"],
+        "section_11_notification_pdf" | "preliminary_notification_draft" | "sec_11_notification" => &[
+            "section11", "sec11", "gazette", "preliminarynotification", "notification", "freezeorder",
+        ],
+        "local_newspaper_cuttings" => &["newspaper", "cuttings", "vernacular", "dailynewspaper", "press"],
+        "gram_sabha_resolution" => &["gramsabha", "panchayat", "noticereceipts", "resolution", "notice"],
+        "section_15_objection_petitions" | "objection_petition_summary" => &[
+            "objection", "petition", "claims", "filingreceipts", "dispute", "sec15",
+        ],
+        "ownership_proof_documents" | "land_records_extract" => &[
+            "ownership", "titledeeds", "proof", "extract", "documents", "deeds", "freeze",
+        ],
+        "section_15_2_hearing_minutes" | "hearing_notice_proof" => &[
+            "hearing", "hearingminutes", "personalhearing", "sec152", "minutes", "noticeproof",
+        ],
+        "collector_disposal_order" | "objection_inquiry_report" => &[
+            "disposal", "collectororder", "speakingorder", "inquiryreport", "summaryrecommendation", "order",
+        ],
+        "section_19_declaration_order" | "declaration_draft" => &[
+            "section19", "sec19", "declaration", "gazette", "order",
+        ],
+        "approved_rr_scheme_summary" | "rr_scheme_draft" => &[
+            "r&r", "rrscheme", "rehabilitation", "resettlement", "sec18", "scheme",
+        ],
+        "fund_deposit_receipt" | "compensation_deposit_receipt" => &[
+            "funddeposit", "depositreceipt", "receipt", "escrow", "treasury", "deposit",
+        ],
+        "joint_measurement_survey_sheet" => &[
+            "jointmeasurement", "survey", "surveysheet", "jms", "measurement",
+        ],
+        "asset_tree_structure_valuation" | "market_value_assessment" => &[
+            "valuation", "asset", "tree", "structure", "marketvalue", "multiplier", "assessment",
+        ],
+        "circle_rate_schedule" | "circle_rate_certificate" => &[
+            "circlerate", "rate", "schedule", "marketrate", "circle", "valuation",
+        ],
+        "section_23_30_final_award_order" | "award_summary" => &[
+            "award", "finalaward", "section23", "section30", "speakingorder", "order",
+        ],
+        "compensation_apportionment_statement" | "apportionment_schedule" => &[
+            "apportionment", "statement", "cosharer", "schedule", "shares",
+        ],
+        "market_value_computation_sheet" => &[
+            "marketvalue", "computation", "sheet", "valuation",
+        ],
+        "solatium_100_percent_audit_sheet" | "solatium_calculation" => &[
+            "solatium", "100percent", "firstschedule", "additionalcompensation", "audit",
+        ],
+        "interest_accrual_statement" => &[
+            "interest", "accrual", "statement", "12percent", "additionalamount",
+        ],
+        "pfms_sanction_order" => &[
+            "pfms", "sanction", "order", "escrow", "paymentbatch",
+        ],
+        "dbt_payment_advice" | "payment_schedule" => &[
+            "dbt", "paymentadvice", "advice", "directbenefit", "disburse", "schedule",
+        ],
+        "bank_utr_acknowledgement" | "bank_account_verification" | "escrow_deposit_proof" => &[
+            "bank", "utr", "acknowledgement", "npci", "aadhaar", "receipt", "escrow",
+        ],
+        "possession_memo" => &[
+            "possessionmemo", "memo", "possession", "sec38",
+        ],
+        "panchnama_record" | "panchnama_possession" => &[
+            "panchnama", "witness", "record", "possession",
+        ],
+        "handover_certificate" | "site_handover_certificate" => &[
+            "handover", "certificate", "sitehandover", "unencumbered",
+        ],
+        "schedule_ii_entitlement_delivery_receipts" | "rr_entitlement_record" => &[
+            "entitlement", "scheduleii", "receipts", "delivery", "r&r", "rehabilitation",
+        ],
+        "housing_allotment_deed" => &[
+            "housing", "allotment", "deed", "allotmentdeed", "resettlement",
+        ],
+        "resettlement_site_clearance" => &[
+            "resettlement", "siteclearance", "clearance", "site",
+        ],
+        "revenue_title_mutation_order" | "revenue_mutation_order" => &[
+            "revenue", "mutation", "mutationorder", "ror", "titlemutation",
+        ],
+        "final_audit_reconciliation_certificate" | "rehabilitation_closure_report" => &[
+            "finalaudit", "reconciliation", "auditcertificate", "closure", "certificate",
+        ],
+        "project_handover_sign_off" => &[
+            "signoff", "handover", "projectclosure", "closure", "archival",
+        ],
+        _ => &[],
+    };
+
+    for alias in aliases {
+        if sub_norm.contains(alias) {
+            return true;
+        }
+    }
+
+    false
+}
+
 fn check_mandatory_documents(
     required_docs: &[&'static str],
     submitted_docs: &[String],
@@ -1709,15 +1959,10 @@ fn check_mandatory_documents(
 ) -> Vec<&'static str> {
     let mut missing = Vec::new();
     for &req in required_docs {
-        let req_norm = req.to_lowercase().replace(['_', '-', ' ', '(', ')', '/', '.'], "");
-        let present = submitted_docs.iter().any(|d| {
-            let d_norm = d.to_lowercase().replace(['_', '-', ' ', '(', ')', '/', '.'], "");
-            d_norm.contains(&req_norm) || req_norm.contains(&d_norm)
-        }) || project_docs.iter().any(|p| {
-            let k_norm = p.kind.to_lowercase().replace(['_', '-', ' ', '(', ')', '/', '.'], "");
-            let f_norm = p.file_name.to_lowercase().replace(['_', '-', ' ', '(', ')', '/', '.'], "");
-            k_norm.contains(&req_norm) || req_norm.contains(&k_norm) || f_norm.contains(&req_norm)
-        });
+        let present = submitted_docs.iter().any(|d| matches_statutory_doc(req, d))
+            || project_docs.iter().any(|p| {
+                matches_statutory_doc(req, &p.kind) || matches_statutory_doc(req, &p.file_name)
+            });
         if !present {
             missing.push(req);
         }
@@ -1779,18 +2024,11 @@ async fn approve_workflow_endpoint(
     // This avoids holding the in_mem write lock across DB awaits.
     // ============================================================
     let (workflow_id, project_id, current_stage, next_stage) = {
-        let in_mem = state.in_memory.read().unwrap();
-        let workflow_id = resolve_workflow_instance(&in_mem, &id_str)?;
-        let instance = in_mem
-            .workflows
-            .get(&workflow_id)
-            .ok_or_else(|| ApiError::NotFound(format!("Workflow not found for ID '{}'", workflow_id)))?;
-        let project_id = instance.project_id;
-        let current_stage = instance.current_stage;
+        let (w_id, p_id, c_stage) = resolve_workflow_and_populate(&state, &id_str).await?;
         let next_stage = request.target_stage
-            .or_else(|| next_statutory_stage(&current_stage))
+            .or_else(|| next_statutory_stage(&c_stage))
             .unwrap_or(ProjectStage::ProjectClosure);
-        (workflow_id, project_id, current_stage, next_stage)
+        (w_id, p_id, c_stage, next_stage)
     };
 
     // ============================================================
@@ -1865,6 +2103,11 @@ async fn approve_workflow_endpoint(
                 (None, None)
             };
 
+            let objections_cleared = request.documents.iter().any(|d| {
+                let dl = d.to_lowercase();
+                dl.contains("objection") || dl.contains("hearing") || dl.contains("inquiry") || dl.contains("section_15") || dl.contains("disposal")
+            }) || request.remarks.as_ref().map(|s| !s.trim().is_empty()).unwrap_or(false);
+
             if let Err(gate_failure) = sih_workflow::check_timeline_gates(
                 &project,
                 &next_stage,
@@ -1872,6 +2115,7 @@ async fn approve_workflow_endpoint(
                 &stays,
                 paid_paise,
                 awarded_paise,
+                objections_cleared,
             ) {
                 return Err(ApiError::BadRequest(format!(
                     "Timeline gate failed ({}): {}",
@@ -2126,6 +2370,8 @@ async fn reject_workflow_endpoint(
         .or_else(|| body_val.get("reason").and_then(|v| v.as_str()))
         .map(|s| s.to_string());
 
+    let (workflow_id, project_id, current_stage) = resolve_workflow_and_populate(&state, &id_str).await?;
+
     // Scope the in-memory write lock so it is released before the audit-log
     // append below — see Task E notes in append_audit_entry_db_and_mem.
     let (
@@ -2141,16 +2387,6 @@ async fn reject_workflow_endpoint(
         updated_instance,
     ) = {
         let mut in_mem = state.in_memory.write().unwrap();
-        let workflow_id = resolve_workflow_instance(&in_mem, &id_str)?;
-
-        let (project_id, current_stage) = {
-            let instance = in_mem
-                .workflows
-                .get(&workflow_id)
-                .ok_or_else(|| ApiError::NotFound(format!("Workflow not found for ID '{}'", workflow_id)))?;
-            (instance.project_id, instance.current_stage)
-        };
-
         let prev_stage = previous_statutory_stage(&current_stage);
         let prev_handler = sih_workflow::who_handles_stage(&prev_stage);
         let (actor_name, actor_role, actor_dept) = resolve_actor_details(&in_mem, user);
@@ -2329,18 +2565,7 @@ async fn get_workflow_status(
             None
         };
 
-        let row = match row {
-            Some(r) => r,
-            None => sqlx::query(
-                "SELECT id, project_id, authority::text as authority, current_stage, started_at, 
-                        notification_at, deadline_at, completed_at, lapsed_at
-                 FROM workflow_instance
-                 LIMIT 1"
-            )
-            .fetch_one(pool)
-            .await
-            .map_err(|_| ApiError::NotFound(format!("Workflow not found for ID '{id_str}'")))?,
-        };
+        if let Some(row) = row {
 
         let workflow_id: Uuid = row.get("id");
         let project_id: Uuid = row.get("project_id");
@@ -2433,11 +2658,11 @@ async fn get_workflow_status(
             can_advance: missing.is_empty() && !is_terminal,
             recent_actions,
         }));
+        }
     }
 
+    let (workflow_id, _project_id, _current_stage) = resolve_workflow_and_populate(&state, &id_str).await?;
     let in_mem = state.in_memory.read().unwrap();
-    let workflow_id = resolve_workflow_instance(&in_mem, &id_str)?;
-
     let instance = in_mem
         .workflows
         .get(&workflow_id)

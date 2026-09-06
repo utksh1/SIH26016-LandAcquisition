@@ -619,6 +619,7 @@ pub fn check_timeline_gates(
     stays: &[(DateTime<Utc>, DateTime<Utc>)],
     compensation_paid_paise: Option<i64>,
     compensation_awarded_paise: Option<i64>,
+    objections_cleared: bool,
 ) -> Result<TransitionDecision, GateFailure> {
     use crate::timeline;
 
@@ -657,24 +658,28 @@ pub fn check_timeline_gates(
     }
 
     // §22.2 — ObjectionPeriod → Hearing requires the objection window to be
-    // actually closed. We use the Project.preliminary_notification_at as the
-    // anchor and project.authority for the window length.
+    // actually closed or certified disposed by the Collector. We use the
+    // Project.preliminary_notification_at as the anchor and project.authority
+    // for the window length.
     if project.stage == ProjectStage::ObjectionPeriod
         && *target == ProjectStage::Hearing
     {
-        if let Some(notified_at) = project.preliminary_notification_at {
-            if timeline::objection_window_open(notified_at, project.authority, now) {
-                return Err(GateFailure {
-                    code: "objection_window_still_open",
-                    message: format!(
-                        "The statutory objection window is still open ({}-day period \
-                         from Section 11 notification on {}). Hearings cannot be \
-                         scheduled until the window closes per RFCTLARR Act 2013 \
-                         §15 / NH Act §3A.",
-                        if project.authority == Authority::NationalHighways { 21 } else { 60 },
-                        notified_at.format("%Y-%m-%d")
-                    ),
-                });
+        if !objections_cleared {
+            if let Some(notified_at) = project.preliminary_notification_at {
+                if timeline::objection_window_open(notified_at, project.authority, now) {
+                    return Err(GateFailure {
+                        code: "objection_window_still_open",
+                        message: format!(
+                            "The statutory objection window is still open ({}-day period \
+                             from Section 11 notification on {}). Hearings cannot be \
+                             scheduled until the window closes or the Collector certifies \
+                             Section 15 objections cataloged and disposed per RFCTLARR Act 2013 \
+                             §15 / NH Act §3A.",
+                            if project.authority == Authority::NationalHighways { 21 } else { 60 },
+                            notified_at.format("%Y-%m-%d")
+                        ),
+                    });
+                }
             }
         }
     }
@@ -836,7 +841,7 @@ pub async fn initialize_workflow(
 
     sqlx::query(
         "INSERT INTO workflow_instance (id, project_id, authority, current_stage, started_at, deadline_at)
-         VALUES ($1, $2, $3, $4, $5, $6)"
+         VALUES ($1, $2, $3::authority_code, $4, $5, $6)"
     )
     .bind(instance.id)
     .bind(project_id)

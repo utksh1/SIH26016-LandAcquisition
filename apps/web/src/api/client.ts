@@ -790,6 +790,10 @@ export interface CreateProjectRequest {
   authority: Authority
   state_code: string
   district_code: string
+  requiring_body?: string
+  estimated_budget_cr?: number
+  total_area_hectares?: number
+  initial_parcels_count?: number
 }
 
 export interface TransitionRequest {

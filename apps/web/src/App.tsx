@@ -1016,6 +1016,88 @@ const stageToPersonaMap: Record<number, StakeholderId> = {
   12: 'government_dashboard',
 }
 
+interface StageRelatedItem {
+  name: string
+  detail: string
+  status: 'verified' | 'submitted' | 'approved' | 'cleared' | 'computed'
+  type: 'doc' | 'cadastral' | 'statutory' | 'finance' | 'hearing'
+}
+
+const stageRelatedItemsMap: Record<number, StageRelatedItem[]> = {
+  0: [
+    { name: 'Detailed Project Report (DPR)', detail: 'Corridor feasibility & engineering design (14.2 MB) · SHA-256 Verified', status: 'verified', type: 'doc' },
+    { name: 'Alignment Shapefile & RoW Buffer', detail: '18.5 Ha alignment geometry overlay verified on cadastral boundary', status: 'verified', type: 'cadastral' },
+    { name: 'Village Survey Schedule', detail: '18 cadastral parcels identified with khasra numbers & tentative extents', status: 'verified', type: 'cadastral' },
+    { name: 'Administrative Sanction Order', detail: 'Central Sanction Ref #NHAI/LA/2026/089 · ₹120.00 Cr earmarked', status: 'approved', type: 'finance' },
+  ],
+  1: [
+    { name: 'Cadastral Parcels Schedule', detail: '18 Cadastral Parcels (1041/1 to 1058/3) cross-checked against DILRMP', status: 'verified', type: 'cadastral' },
+    { name: 'Jamabandi RoR Extracts', detail: 'Record of Rights authenticated via State Land Records Portal (Bhoomi/MeeSeva)', status: 'verified', type: 'doc' },
+    { name: 'ULPIN Identity Generation', detail: 'Unique Land Parcel Identification Number generated for 18/18 parcels', status: 'cleared', type: 'statutory' },
+    { name: 'Cadastral Boundary Demarcation', detail: 'Field pegs established along corridor perimeter with GPS coordinates', status: 'verified', type: 'cadastral' },
+  ],
+  2: [
+    { name: 'Section 4(1) SIA Study Notification', detail: 'Gazette notification issued for Social Impact Assessment in 4 villages', status: 'verified', type: 'statutory' },
+    { name: 'Baseline Family Census', detail: '42 Project Affected Families (PAFs) surveyed across livelihood sectors', status: 'verified', type: 'cadastral' },
+    { name: 'Gram Sabha Notices', detail: 'Public hearing notices pasted at Panchayat Bhavans in affected habitations', status: 'cleared', type: 'hearing' },
+    { name: 'Empanelled SIA Agency Terms', detail: 'State Social Impact Unit appointed with 60-day baseline study mandate', status: 'approved', type: 'doc' },
+  ],
+  3: [
+    { name: 'SIA Final Study Report', detail: 'Comprehensive livelihood, gender, and environmental impact assessment', status: 'verified', type: 'doc' },
+    { name: 'Social Impact Management Plan (SIMP)', detail: 'Mitigation measures for displacement, water access, and livestock transit', status: 'verified', type: 'statutory' },
+    { name: 'Expert Group Section 7 Appraisal', detail: 'Independent Multidisciplinary Expert Group unanimously recommends proposal', status: 'approved', type: 'statutory' },
+    { name: 'Section 8(2) Public Purpose Certificate', detail: 'Government certification of legitimate public purpose and minimum land requirement', status: 'cleared', type: 'statutory' },
+  ],
+  4: [
+    { name: 'Section 11 Preliminary Notification', detail: 'Published in State Extraordinary Gazette with Schedule of 18 Parcels', status: 'verified', type: 'statutory' },
+    { name: 'Newspaper Publication Tearsheets', detail: '1 Regional Vernacular Daily + 1 English National Daily publications verified', status: 'verified', type: 'doc' },
+    { name: 'Land Transaction Freeze Flag', detail: 'Transaction lock flagged on DILRMP revenue server (Section 11(4) prohibition)', status: 'cleared', type: 'statutory' },
+    { name: 'Public Notice Dissemination', detail: 'Affixed at Sub-Divisional Office, Tehsil notice board, and Gram Chavadis', status: 'verified', type: 'hearing' },
+  ],
+  5: [
+    { name: 'Section 15 Objections Register', detail: '3 Citizen objections cataloged (2 area discrepancies, 1 co-sharer claim)', status: 'submitted', type: 'hearing' },
+    { name: 'Hearing Summons Dispatched', detail: 'Statutory 15-day personal hearing summons issued via Registered Post & SMS', status: 'cleared', type: 'statutory' },
+    { name: 'Title Deed Evidentiary Submissions', detail: 'Registered partition deeds & succession certificates filed by landowners', status: 'verified', type: 'doc' },
+  ],
+  6: [
+    { name: 'Section 15(2) Personal Hearings', detail: 'Hearings conducted by CALA / District Collector with recorded statements', status: 'verified', type: 'hearing' },
+    { name: 'Speaking Disposal Orders', detail: 'Individual reasoned orders issued under Collector seal disposing all 3 petitions', status: 'approved', type: 'statutory' },
+    { name: 'Collector Recommendation Report', detail: 'Statutory summary recommendation submitted to Appropriate Government', status: 'cleared', type: 'doc' },
+  ],
+  7: [
+    { name: 'Section 19 Declaration of Acquisition', detail: 'Published in Extraordinary Gazette declaring land required for public project', status: 'verified', type: 'statutory' },
+    { name: 'R&R Scheme Approval (Section 18)', detail: 'Rehabilitation & Resettlement entitlements sanctioned for 42 affected families', status: 'approved', type: 'statutory' },
+    { name: 'Summary Land Schedule', detail: '18 Cadastral Parcels definitively vested under acquisition umbrella', status: 'cleared', type: 'cadastral' },
+  ],
+  8: [
+    { name: 'Section 26 Market Value Schedule', detail: 'Circle rates & 3-year registered sale deed average computed per hectare', status: 'computed', type: 'finance' },
+    { name: '100% Solatium Calculation', detail: '100% statutory solatium added under First Schedule of RFCTLARR Act 2013', status: 'computed', type: 'finance' },
+    { name: '12% Additional Market Value', detail: '12% per annum calculated from Section 11 notice to Award date', status: 'computed', type: 'finance' },
+    { name: 'Assets & Tree Valuation Reports', detail: 'Horticulture, Forest & PWD structural valuations incorporated into award', status: 'verified', type: 'doc' },
+  ],
+  9: [
+    { name: 'Section 30 Final Compensation Award', detail: 'Statutory Speaking Award signed for all 18 parcels totaling ₹120.00 Cr', status: 'approved', type: 'statutory' },
+    { name: 'Co-Sharer Apportionment Table', detail: 'Share distribution calculated among joint owners and title claimants', status: 'cleared', type: 'cadastral' },
+    { name: 'Section 77 Escrow Sanction', detail: 'Disputed amount placed in interest-bearing Authority escrow account', status: 'verified', type: 'finance' },
+  ],
+  10: [
+    { name: 'PFMS Direct Benefit Transfer Batch', detail: 'Electronic payment batch generated with digital signatures of Treasury Officer', status: 'approved', type: 'finance' },
+    { name: 'NPCI / Aadhaar Bank Validation', detail: '18 landowner bank accounts validated via PFMS-NPCI mapper with zero returns', status: 'verified', type: 'finance' },
+    { name: '100% Award Disbursement', detail: '₹120.00 Cr disbursed directly to beneficiaries / deposited with Authority', status: 'cleared', type: 'finance' },
+  ],
+  11: [
+    { name: 'Section 38 Payment Certification', detail: 'CALA certifies 100% compensation & R&R paid prior to physical displacement', status: 'cleared', type: 'statutory' },
+    { name: 'Physical Possession Panchnama', detail: 'Joint on-site panchnama executed by Tehsildar with Panch witnesses', status: 'verified', type: 'doc' },
+    { name: 'Revenue Mutation to Requiring Body', detail: 'Ownership mutated in DILRMP RoR in favor of National Highways Authority', status: 'cleared', type: 'cadastral' },
+    { name: 'Site Handover Certificate', detail: 'Unencumbered physical Right-of-Way handed over to NHAI Project Director', status: 'approved', type: 'statutory' },
+  ],
+  12: [
+    { name: 'R&R Completion Certificate', detail: 'All 42 affected families resettled with constructed housing & monetary grants', status: 'approved', type: 'statutory' },
+    { name: 'Financial Audit Reconciliation', detail: 'Zero audit observations; unspent contingency balance surrendered to Treasury', status: 'verified', type: 'finance' },
+    { name: 'Cryptographic Audit Seal', detail: 'End-to-end SHA-256 Merkle hash chain sealed and archived for legal permanence', status: 'cleared', type: 'statutory' },
+  ],
+}
+
 /**
  * Role-conditional panel visibility map.
  *
@@ -1204,6 +1286,10 @@ export default function App() {
   const [activePersona, setActivePersona] = useState<StakeholderPersona>(stakeholderPersonas[0])
   const [language, setLanguage] = useState<Language>('en')
   const [showMobileNav, setShowMobileNav] = useState(false)
+  const [loginSearch, setLoginSearch] = useState('')
+  const [loginActiveGroup, setLoginActiveGroup] = useState<string | null>(null)
+  const [showLoginModal, setShowLoginModal] = useState(false)
+  const [loginModalTab, setLoginModalTab] = useState<'fast' | 'ehrms' | 'citizen'>('fast')
 
   // Core Data — no hardcoded defaults. KPIs / notices / selected project
   // are all fetched from the PostgreSQL backend (see useEffect below). The
@@ -1590,6 +1676,9 @@ export default function App() {
       const hash = window.location.hash.replace(/^#\/?/, '')
       if (hash === '' || hash === 'landing') {
         setPortalView('landing')
+      } else if (hash === 'login' || hash === 'signin') {
+        setPortalView('landing')
+        setShowLoginModal(true)
       } else if (hash === 'login/ehrms' || hash === 'ehrms-login' || hash === 'mock-ehrms') {
         setPortalView('ehrms_login')
       } else if (hash.startsWith('dashboard/')) {
@@ -1744,6 +1833,16 @@ export default function App() {
         target_stage: nextStage?.stageCode,
       })
       
+      const updatedStageName = nextStage ? nextStage.name : 'Completed'
+      const updatedProj: Project = {
+        ...selected,
+        stage: updatedStageName,
+        stageIndex: nextIdx,
+        acquired: Math.min(selected.parcels, Math.round((nextIdx / rfctlarrStages.length) * selected.parcels)),
+      }
+      setSelected(updatedProj)
+      setProjects((prev) => prev.map((p) => (p.id === selected.id ? updatedProj : p)))
+
       if (nextIdx >= rfctlarrStages.length) {
         showToast('Acquisition project has reached final completed stage!')
       } else if (nextStage) {
@@ -2005,8 +2104,28 @@ export default function App() {
       showToast('Please enter a project name')
       return
     }
+
+    let backendId = `prj-${Date.now()}`
+    try {
+      const created = await apiClient.createProject({
+        name: newProjectName,
+        authority: newProjectAuthority,
+        state_code: newProjectState,
+        district_code: newProjectDistrict,
+        requiring_body: activePersona.department || resolvePersonaName(activePersona),
+        estimated_budget_cr: parseFloat(newProjectBudget) || 120.0,
+        total_area_hectares: parseFloat(newProjectArea) || 18.5,
+        initial_parcels_count: 18,
+      })
+      if (created?.id) {
+        backendId = created.id
+      }
+    } catch (err) {
+      console.warn('Backend project creation fallback:', err)
+    }
+
     const newProj: Project = {
-      id: `prj-${Date.now()}`,
+      id: backendId,
       name: newProjectName,
       code: `PRJ-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
       location: `${newProjectDistrict} · ${newProjectState}`,
@@ -2018,6 +2137,9 @@ export default function App() {
       due: '30 Nov 2026',
       owner: resolvePersonaName(activePersona),
       amount: `₹${newProjectBudget} Cr`,
+      state_code: newProjectState,
+      district_code: newProjectDistrict,
+      requiring_body: activePersona.department || 'National Highways Authority of India (NHAI)',
     }
     setProjects([newProj, ...projects])
     setSelected(newProj)
@@ -2025,14 +2147,9 @@ export default function App() {
     setShowCreateModal(false)
     showToast(`Project Proposal Created: "${newProjectName}"!`)
 
-    try {
-      await apiClient.createProject({
-        name: newProjectName,
-        authority: newProjectAuthority,
-        state_code: newProjectState,
-        district_code: newProjectDistrict,
-      }).catch(() => {})
-    } catch {}
+    syncWorkflowStatus(backendId)
+    refreshMyTasks()
+    refreshMeTasks()
   }
 
   // Handle Audit Drawer Open
@@ -2052,157 +2169,645 @@ export default function App() {
   // 1. LANDING PAGE SCREEN
   // ----------------------------------------------------
   if (portalView === 'landing') {
+    // Group personas by categoryGroup for the organized login grid
+    const categoryGroupOrder: string[] = [
+      'Collectors',
+      'State Governments',
+      'Local Bodies',
+      'Requiring Bodies',
+      'Citizen Landowners',
+      'Gram Sabhas',
+      'Tribunals & Clearances',
+      'National & Technical',
+    ]
+
+    const categoryGroupMeta: Record<string, { icon: string; accent: string; badgeClass: string; desc: string }> = {
+      Collectors: { icon: '⚖', accent: '#c5b0f4', badgeClass: 'figma-badge-lilac', desc: 'District Collectors & CALA Authorities' },
+      'State Governments': { icon: '🏛', accent: '#dceeb1', badgeClass: 'figma-badge-lime', desc: 'State Revenue Secretariats' },
+      'Local Bodies': { icon: '🗂', accent: '#c8e6cd', badgeClass: 'figma-badge-mint', desc: 'Tehsildars & Mandal Officers' },
+      'Requiring Bodies': { icon: '🏗', accent: '#f3c9b6', badgeClass: 'figma-badge-coral', desc: 'PIAs — NHAI, HPCL, DFCCIL' },
+      'Citizen Landowners': { icon: '👤', accent: '#c8e6cd', badgeClass: 'figma-badge-mint', desc: 'Cadastral Parcel & Title Owners' },
+      'Gram Sabhas': { icon: '🌾', accent: '#dceeb1', badgeClass: 'figma-badge-lime', desc: 'Village Panchayats & Consent Bodies' },
+      'Tribunals & Clearances': { icon: '📜', accent: '#efd4d4', badgeClass: 'figma-badge-pink', desc: 'State LARRA Tribunal & DFO Forest Cell' },
+      'National & Technical': { icon: '🔬', accent: '#f4ecd6', badgeClass: 'figma-badge-cream', desc: 'Central Reviewers, SIA, Legal, Finance, GIS' },
+    }
+
+    const filteredPersonas = loginSearch.trim()
+      ? stakeholderPersonas.filter(
+          (p) =>
+            p.title.toLowerCase().includes(loginSearch.toLowerCase()) ||
+            p.name.toLowerCase().includes(loginSearch.toLowerCase()) ||
+            p.department.toLowerCase().includes(loginSearch.toLowerCase()) ||
+            (p.jurisdiction?.label || '').toLowerCase().includes(loginSearch.toLowerCase())
+        )
+      : stakeholderPersonas
+
+    // Curated high-frequency personas for instant 1-click fast login chips
+    const fastLoginIds = [
+      'collector',
+      'requiring_body',
+      'land_owner',
+      'citizen_lakshmi',
+      'citizen_sunita',
+      'state_andhra',
+      'local_kurnool',
+      'gram_sabha_kurnool',
+      'finance_officer',
+    ]
+    const fastPersonas = fastLoginIds
+      .map((id) => stakeholderPersonas.find((p) => p.id === id))
+      .filter((p): p is StakeholderPersona => Boolean(p))
+
     return (
-      <div className="landing-shell">
+      <div className="figma-landing-shell">
         {/* National Tricolor Accent */}
         <div className="gov-tricolor-bar" />
 
-        {/* Official Government Top Banner */}
-        <div className="gov-portal-banner">
-          <span>🏛 भारत सरकार · Government of India | Ministry of Rural Development & Land Resources</span>
-          <span>Digital India Initiative · NLAMS Portal v2.4 MVP</span>
-        </div>
-
-        <header className="landing-header">
-          <div className="landing-emblem">
-            <div className="emblem-icon">🏛</div>
-            <div>
-              <strong style={{ fontSize: 17, color: '#10251f' }}>
-                National Land Acquisition & Management System
-              </strong>
-              <div style={{ font: '11px "DM Mono"', color: '#667c70' }}>
-                राष्ट्रीय भूमि अधिग्रहण एवं प्रबंधन प्रणाली · Unified Statutory Portal
-              </div>
+        {/* 1. Top Navigation (Pure White Canvas) */}
+        <header className="figma-topbar">
+          <div className="figma-brand-lockup" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+            <div className="figma-brand-mark">⚡</div>
+            <div className="figma-brand-titles">
+              <span className="figma-brand-name">LandFlow · NLAMS</span>
+              <span className="figma-brand-sub">राष्ट्रीय भूमि अधिग्रहण प्रणाली · RFCTLARR 2013</span>
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-            <span className="badge-success">● SYSTEM OPERATIONAL</span>
+
+          <nav className="figma-nav-links">
             <button
-              className="secondary-button"
+              className="figma-nav-link"
               onClick={() => {
-                apiClient.listWorkflowRegimes().then(setRegimes).catch(console.error)
-                apiClient.listDepartments().then(setDepartments).catch(console.error)
-                apiClient.listMockEhrmsEmployees().then(setEhrmsEmployees).catch(console.error)
-                setShowRegimesModal(true)
+                const el = document.getElementById('figma-tiers')
+                if (el) el.scrollIntoView({ behavior: 'smooth' })
               }}
             >
-              Workflow Regimes
+              Statutory Tiers
+            </button>
+            <button
+              className="figma-nav-link"
+              onClick={() => {
+                const el = document.getElementById('figma-capabilities')
+                if (el) el.scrollIntoView({ behavior: 'smooth' })
+              }}
+            >
+              Platform Capabilities
+            </button>
+          </nav>
+
+          <div className="figma-topbar-actions">
+            <button
+              className="figma-btn-secondary"
+              onClick={() => {
+                setLoginModalTab('citizen')
+                setShowLoginModal(true)
+              }}
+            >
+              Citizen Portal
+            </button>
+            <button
+              className="figma-btn-primary"
+              onClick={() => {
+                setLoginModalTab('fast')
+                setShowLoginModal(true)
+              }}
+            >
+              Sign In
             </button>
           </div>
         </header>
 
-        <section className="landing-hero">
-          <p className="eyebrow" style={{ justifyContent: 'center' }}>
-            <span className="eyebrow-line" />
-            MULTI-STAKEHOLDER STATUTORY WORKFLOW PLATFORM
-          </p>
-          <h1>National Land Acquisition & Management System</h1>
-          <p>
-            End-to-end statutory governance connecting Land Requiring Bodies, District Collectorates (CALA),
-            Revenue Departments, Cadastral GIS, and PFMS Direct Benefit Transfer under RFCTLARR Act 2013.
-          </p>
+        {/* Single Continuous Page Canvas */}
+        <main className="figma-continuous-page">
+          {/* 1. Hero Block */}
+          <div className="figma-page-hero">
+            <div className="figma-eyebrow">
+              <span>● RFCTLARR ACT 2013 · STATUTORY OPERATING SYSTEM</span>
+            </div>
 
-          {/* Primary Action Cards: Login with eHRMS & Land Owner Login */}
-          <div className="landing-primary-actions">
-            <div className="gov-cta-card ehrms">
-              <div>
-                <span className="gov-cta-badge blue">GOVERNMENT EMPLOYEE LOGIN</span>
-                <h2>Login with eHRMS</h2>
-                <p>
-                  Secure single sign-on simulation for District Collectors, Revenue Officers, GIS Specialists,
-                  Finance Controllers, and Rehabilitation Officers via eHRMS Employee ID.
-                </p>
-              </div>
+            <h1 className="figma-hero-title">
+              Land acquisition.<br />
+              <span className="figma-highlight-lime">Engineered with precision.</span>
+            </h1>
+
+            <p className="figma-hero-subtitle">
+              The unified statutory operating system for linear infrastructure land acquisition across India's highways, railways, and energy corridors.
+            </p>
+
+            <div className="figma-hero-actions">
               <button
-                className="btn-ehrms-action"
+                className="figma-btn-hero-primary"
                 onClick={() => {
-                  setPortalView('ehrms_login')
-                  window.location.hash = '#login/ehrms'
+                  setLoginModalTab('fast')
+                  setShowLoginModal(true)
                 }}
               >
-                <span>🔒 Login with eHRMS ➔</span>
+                <span>Launch Command Center ➔</span>
               </button>
-            </div>
-
-            <div className="gov-cta-card citizen">
-              <div>
-                <span className="gov-cta-badge green">PUBLIC CITIZEN ACCESS</span>
-                <h2>Land Owner Login</h2>
-                <p>
-                  Transparent citizen portal to search land survey numbers, inspect Section 11 gazette notices,
-                  file Section 15 statutory objections, and track DBT compensation awards.
-                </p>
-              </div>
               <button
-                className="btn-citizen-action"
-                onClick={handleCitizenLogin}
-              >
-                <span>👤 Land Owner Login ➔</span>
-              </button>
-            </div>
-          </div>
-
-          <div className="landing-stats-bar">
-            <div className="landing-stat-chip">
-              <strong>42</strong> Active Projects
-            </div>
-            <div className="landing-stat-chip">
-              <strong>18</strong> States & UTs
-            </div>
-            <div className="landing-stat-chip">
-              <strong>100%</strong> Solatium Compliant
-            </div>
-            <div className="landing-stat-chip">
-              <strong>SHA-256</strong> Cryptographic Audit Ledger
-            </div>
-          </div>
-        </section>
-
-        <div style={{ maxWidth: 1320, margin: '0 auto 16px', padding: '0 32px' }}>
-          <div className="demo-stepper-bar">
-            <div className="demo-stepper-left">
-              <span className="stepper-chip">DEMO STAKEHOLDER PORTAL</span>
-              <span style={{ fontSize: 13 }}>
-                Or select any specialized stakeholder below to enter their role dashboard directly:
-              </span>
-            </div>
-            <div className="demo-stepper-actions">
-              <button
-                className="stepper-btn"
+                className="figma-btn-hero-secondary"
                 onClick={() => {
-                  apiClient.listWorkflowRegimes().then(setRegimes).catch(() => {})
-                  setShowRegimesModal(true)
+                  setLoginModalTab('citizen')
+                  setShowLoginModal(true)
                 }}
               >
-                View Workflow Regimes
+                <span>Citizen Landowner Portal</span>
               </button>
             </div>
-          </div>
-        </div>
 
-        <section className="persona-grid" aria-label="Available stakeholder portals">
-          {stakeholderPersonas.map((persona) => (
-            <article className="persona-card" key={persona.id}>
-              <span className="persona-badge">{persona.badge}</span>
-              <h3>{persona.title}</h3>
-              <div className="persona-dept">{persona.subtitle}</div>
-              <div className="persona-officer">
-                <Icon name={persona.icon} size={20} />
+            {/* Integrated Precision Metrics Strip */}
+            <div className="figma-page-metrics">
+              <div className="figma-metric-card">
+                <div className="figma-metric-number">42</div>
+                <div className="figma-metric-label">Active Linear Corridors</div>
+              </div>
+              <div className="figma-metric-card">
+                <div className="figma-metric-number">18</div>
+                <div className="figma-metric-label">States & UTs Operating</div>
+              </div>
+              <div className="figma-metric-card">
+                <div className="figma-metric-number">100%</div>
+                <div className="figma-metric-label">Solatium & R&R Adherence</div>
+              </div>
+              <div className="figma-metric-card">
+                <div className="figma-metric-number">SHA-256</div>
+                <div className="figma-metric-label">Immutable Cryptographic Ledger</div>
+              </div>
+            </div>
+          </div>
+
+          {/* 2. Statutory Governance Workspaces */}
+          <div className="figma-page-tiers" id="figma-tiers">
+            <div className="figma-section-header">
+              <div className="figma-section-eyebrow">STATUTORY WORKSPACES</div>
+              <h2 className="figma-section-title">Unified Governance Across Every Statutory Tier</h2>
+              <p className="figma-section-sub">
+                Purpose-built workspaces engineered for strict Segregation of Duties (SoD) under the RFCTLARR Act 2013.
+              </p>
+            </div>
+
+            <div className="figma-tiers-grid">
+              {/* Tier 1: Citizen Landowner */}
+              <div className="figma-tier-card">
                 <div>
-                  <strong>{resolvePersonaName(persona)}</strong>
-                  <small>{resolvePersonaDesignation(persona)}</small>
+                  <span className="figma-tier-tag figma-tag-mint">PUBLIC CITIZEN</span>
+                  <h3 className="figma-tier-name">Land Owner & Farmer Desk</h3>
+                  <p className="figma-tier-desc">Direct transparency, entitlement monitoring, and objection filings for affected title holders.</p>
+                  <div className="figma-tier-checklist">
+                    <div className="figma-tier-item">
+                      <svg className="figma-check-svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
+                        <circle cx="8" cy="8" r="7.5" fill="#eef7f0" stroke="#1ea64a" strokeWidth="1" />
+                        <path d="M4.8 8.2L6.8 10.2L11.2 5.8" stroke="#1ea64a" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                      <span>ULPIN Cadastral parcel boundary lookup</span>
+                    </div>
+                    <div className="figma-tier-item">
+                      <svg className="figma-check-svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
+                        <circle cx="8" cy="8" r="7.5" fill="#eef7f0" stroke="#1ea64a" strokeWidth="1" />
+                        <path d="M4.8 8.2L6.8 10.2L11.2 5.8" stroke="#1ea64a" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                      <span>Section 11 & 19 Gazette publication alerts</span>
+                    </div>
+                    <div className="figma-tier-item">
+                      <svg className="figma-check-svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
+                        <circle cx="8" cy="8" r="7.5" fill="#eef7f0" stroke="#1ea64a" strokeWidth="1" />
+                        <path d="M4.8 8.2L6.8 10.2L11.2 5.8" stroke="#1ea64a" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                      <span>Aadhaar-linked DBT compensation tracker</span>
+                    </div>
+                  </div>
+                </div>
+                <button
+                  className="figma-btn-tier-secondary"
+                  onClick={() => {
+                    setLoginModalTab('citizen')
+                    setShowLoginModal(true)
+                  }}
+                >
+                  Open Citizen Portal ➔
+                </button>
+              </div>
+
+              {/* Tier 2: CALA Collectorate Hub (FEATURED PASTEL LIME BLOCK) */}
+              <div className="figma-tier-card featured">
+                <span className="figma-badge-popular">⭐ CALA STATUTORY CORE</span>
+                <div>
+                  <span className="figma-tier-tag figma-tag-lime">QUASI-JUDICIAL AUTHORITY</span>
+                  <h3 className="figma-tier-name">CALA District Collectorate</h3>
+                  <p className="figma-tier-desc">Competent Authority Land Acquisition execution desk for Collectors, SDOs, and Tehsildars.</p>
+                  <div className="figma-tier-checklist">
+                    <div className="figma-tier-item">
+                      <svg className="figma-check-svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
+                        <circle cx="8" cy="8" r="7.5" fill="rgba(0,0,0,0.06)" stroke="#000000" strokeWidth="1" />
+                        <path d="M4.8 8.2L6.8 10.2L11.2 5.8" stroke="#000000" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                      <span>Gazette drafting & Section 11 notice generation</span>
+                    </div>
+                    <div className="figma-tier-item">
+                      <svg className="figma-check-svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
+                        <circle cx="8" cy="8" r="7.5" fill="rgba(0,0,0,0.06)" stroke="#000000" strokeWidth="1" />
+                        <path d="M4.8 8.2L6.8 10.2L11.2 5.8" stroke="#000000" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                      <span>Section 15 Quasi-Judicial hearing disposals</span>
+                    </div>
+                    <div className="figma-tier-item">
+                      <svg className="figma-check-svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
+                        <circle cx="8" cy="8" r="7.5" fill="rgba(0,0,0,0.06)" stroke="#000000" strokeWidth="1" />
+                        <path d="M4.8 8.2L6.8 10.2L11.2 5.8" stroke="#000000" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                      <span>Automated Section 23/26/30 Solatium award decree</span>
+                    </div>
+                  </div>
+                </div>
+                <button
+                  className="figma-btn-tier-primary"
+                  onClick={() => {
+                    const p = stakeholderPersonas.find((sp) => sp.id === 'collector')
+                    if (p) handleLogin(p)
+                  }}
+                >
+                  ⚡ Launch CALA Collector Desk ➔
+                </button>
+              </div>
+
+              {/* Tier 3: Enterprise Requiring Bodies */}
+              <div className="figma-tier-card">
+                <div>
+                  <span className="figma-tier-tag figma-tag-lilac">PLANNING & INFRASTRUCTURE</span>
+                  <h3 className="figma-tier-name">Enterprise Requiring Bodies</h3>
+                  <p className="figma-tier-desc">Corridor-wide alignment planning for Central PIAs (NHAI, HPCL, DFCCIL) and State Secretariats.</p>
+                  <div className="figma-tier-checklist">
+                    <div className="figma-tier-item">
+                      <svg className="figma-check-svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
+                        <circle cx="8" cy="8" r="7.5" fill="#eef7f0" stroke="#1ea64a" strokeWidth="1" />
+                        <path d="M4.8 8.2L6.8 10.2L11.2 5.8" stroke="#1ea64a" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                      <span>Linear corridor alignment GIS geo-referencing</span>
+                    </div>
+                    <div className="figma-tier-item">
+                      <svg className="figma-check-svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
+                        <circle cx="8" cy="8" r="7.5" fill="#eef7f0" stroke="#1ea64a" strokeWidth="1" />
+                        <path d="M4.8 8.2L6.8 10.2L11.2 5.8" stroke="#1ea64a" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                      <span>Section 4 & 7 Social Impact Assessment (SIA)</span>
+                    </div>
+                    <div className="figma-tier-item">
+                      <svg className="figma-check-svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
+                        <circle cx="8" cy="8" r="7.5" fill="#eef7f0" stroke="#1ea64a" strokeWidth="1" />
+                        <path d="M4.8 8.2L6.8 10.2L11.2 5.8" stroke="#1ea64a" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                      <span>State LARRA Tribunal reference case tracking</span>
+                    </div>
+                  </div>
+                </div>
+                <button
+                  className="figma-btn-tier-secondary"
+                  onClick={() => {
+                    const p = stakeholderPersonas.find((sp) => sp.id === 'requiring_body')
+                    if (p) handleLogin(p)
+                  }}
+                >
+                  Open Requiring Body Hub ➔
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* 3. Statutory Capabilities Poster Card (Lilac #c5b0f4) */}
+          <div className="figma-page-capabilities" id="figma-capabilities">
+            <div className="figma-capabilities-header">
+              <span className="figma-block-eyebrow">STATUTORY CAPABILITIES</span>
+              <h2 className="figma-block-headline">Zero administrative discretion. 100% mathematical statutory adherence.</h2>
+              <p className="figma-block-subhead">
+                Every land parcel is indexed with its 14-digit ULPIN, validated against state revenue records, and protected by strict Segregation of Duties under the RFCTLARR Act 2013.
+              </p>
+            </div>
+
+            <div className="figma-pillars-strip">
+              <div className="figma-pillar-card">
+                <div className="figma-pillar-icon-box">🛰️</div>
+                <div className="figma-pillar-text">
+                  <strong>Cadastral GIS Engine</strong>
+                  <p>Automated parcel overlap detection across village cadastre sheets.</p>
                 </div>
               </div>
-              <p className="persona-desc">{persona.description}</p>
-              <button
-                className="persona-login-btn"
-                onClick={() => handleLogin(persona)}
-              >
-                {persona.employeeId ? `Login via eHRMS [${persona.employeeId}] ➔` : `Enter as ${persona.title} ➔`}
-              </button>
-            </article>
-          ))}
-        </section>
+              <div className="figma-pillar-card">
+                <div className="figma-pillar-icon-box">⚖️</div>
+                <div className="figma-pillar-text">
+                  <strong>Segregation of Duties</strong>
+                  <p>Statutory gating prevents unauthorized approval of legal transitions.</p>
+                </div>
+              </div>
+              <div className="figma-pillar-card">
+                <div className="figma-pillar-icon-box">🌾</div>
+                <div className="figma-pillar-text">
+                  <strong>Gram Sabha & PESA</strong>
+                  <p>Mandatory Section 4 & 41 quorum tracking and digital resolutions.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+
+        {/* 4. Seamless Pure White Footer */}
+        <footer className="figma-footer">
+          <div className="figma-footer-grid">
+            <div>
+              <div className="figma-footer-brand-title">LandFlow · NLAMS</div>
+              <p className="figma-footer-brand-desc">
+                National Land Acquisition & Management System — Unified statutory governance platform engineered for India's linear infrastructure projects under the RFCTLARR Act 2013.
+              </p>
+            </div>
+            <div className="figma-footer-col">
+              <h5>Statutory Frameworks</h5>
+              <div className="figma-footer-links">
+                <span className="figma-footer-link">RFCTLARR Act 2013</span>
+                <span className="figma-footer-link">National Highways Act 1956</span>
+                <span className="figma-footer-link">Railways Act 1989</span>
+                <span className="figma-footer-link">Petroleum Pipelines Act 1962</span>
+              </div>
+            </div>
+            <div className="figma-footer-col">
+              <h5>Official Gateways</h5>
+              <div className="figma-footer-links">
+                <button className="figma-footer-link" onClick={() => { setLoginModalTab('ehrms'); setShowLoginModal(true); }}>eHRMS Parichay SSO</button>
+                <button className="figma-footer-link" onClick={() => { setLoginModalTab('citizen'); setShowLoginModal(true); }}>Citizen Landowner Portal</button>
+                <span className="figma-footer-link">Bhoomi Rashi (MoRTH)</span>
+                <span className="figma-footer-link">PM GatiShakti NMP</span>
+              </div>
+            </div>
+          </div>
+          <div className="figma-footer-bottom">
+            <span>© 2026 Ministry of Rural Development & Department of Land Resources (DoLR), Government of India.</span>
+            <span>Smart India Hackathon (SIH26016) · ISO 27001 & STQC Compliant Architecture</span>
+          </div>
+        </footer>
+
+        {/* 10. AUTHENTICATION MODAL DIALOG (100% Light Figma Design) */}
+        {showLoginModal && (
+          <div className="figma-auth-backdrop" onClick={() => setShowLoginModal(false)}>
+            <div className="figma-auth-modal" onClick={(e) => e.stopPropagation()}>
+              {/* Modal Header */}
+              <div className="figma-modal-header">
+                <div className="figma-modal-header-left">
+                  <div className="figma-modal-seal">⚡</div>
+                  <div>
+                    <h3>Sign In to LandFlow</h3>
+                    <p>Select your authentication pathway or pick a stakeholder persona</p>
+                  </div>
+                </div>
+                <button
+                  className="figma-modal-close"
+                  onClick={() => setShowLoginModal(false)}
+                  title="Close dialog"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Segmented Pill Tabs */}
+              <div className="figma-modal-tabs">
+                <button
+                  className={`figma-tab-btn ${loginModalTab === 'fast' ? 'active' : ''}`}
+                  onClick={() => setLoginModalTab('fast')}
+                >
+                  ⚡ 1-Click Fast Pass ({stakeholderPersonas.length})
+                </button>
+                <button
+                  className={`figma-tab-btn ${loginModalTab === 'ehrms' ? 'active' : ''}`}
+                  onClick={() => setLoginModalTab('ehrms')}
+                >
+                  🏛️ Government eHRMS SSO
+                </button>
+                <button
+                  className={`figma-tab-btn ${loginModalTab === 'citizen' ? 'active' : ''}`}
+                  onClick={() => setLoginModalTab('citizen')}
+                >
+                  👤 Citizen Landowner Portal
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="figma-modal-body">
+                {/* TAB 1: 1-CLICK FAST PASS */}
+                {loginModalTab === 'fast' && (
+                  <div>
+                    {/* Top Fast Launcher Chips */}
+                    <div style={{ marginBottom: 16 }}>
+                      <span style={{ font: "700 11px 'DM Mono'", color: '#000000', marginBottom: 8, display: 'block' }}>Frequent Stakeholders:</span>
+                      <div className="figma-fast-chips-row">
+                        {fastPersonas.map((p) => (
+                          <button
+                            key={p.id}
+                            className="figma-fast-chip"
+                            onClick={() => {
+                              setShowLoginModal(false)
+                              handleLogin(p)
+                            }}
+                          >
+                            <span className="figma-chip-dot" style={{ background: p.color }} />
+                            <strong>{resolvePersonaName(p).split(' ')[0]}</strong>
+                            <span className="figma-fast-role">({p.role})</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Filter Controls: Search & Category Pills */}
+                    <div style={{ marginBottom: 16, borderBottom: '1px solid #e6e6e6', paddingBottom: 14 }}>
+                      <div className="figma-search-wrap">
+                        <Icon name="search" size={15} />
+                        <input
+                          type="text"
+                          placeholder="Search 30 stakeholders by name, role, district, state..."
+                          value={loginSearch}
+                          onChange={(e) => setLoginSearch(e.target.value)}
+                          className="figma-search-input"
+                          autoFocus
+                        />
+                        {loginSearch && (
+                          <button
+                            onClick={() => setLoginSearch('')}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#666666' }}
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="figma-cat-tabs">
+                        <button
+                          className={`figma-cat-btn ${loginActiveGroup === null ? 'active' : ''}`}
+                          onClick={() => setLoginActiveGroup(null)}
+                        >
+                          All ({filteredPersonas.length})
+                        </button>
+                        {categoryGroupOrder.map((group) => {
+                          const count = filteredPersonas.filter((p) => p.categoryGroup === group).length
+                          if (count === 0) return null
+                          const meta = categoryGroupMeta[group]
+                          return (
+                            <button
+                              key={group}
+                              className={`figma-cat-btn ${loginActiveGroup === group ? 'active' : ''}`}
+                              onClick={() => setLoginActiveGroup(loginActiveGroup === group ? null : group)}
+                            >
+                              <span>{meta.icon}</span>
+                              <span>{group}</span>
+                              <span style={{ opacity: 0.7 }}>({count})</span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Scrollable Slim Persona Tiles Grid */}
+                    <div className="figma-tiles-grid">
+                      {filteredPersonas
+                        .filter((p) => loginActiveGroup === null || p.categoryGroup === loginActiveGroup)
+                        .map((persona) => {
+                          const meta = categoryGroupMeta[persona.categoryGroup] || { badgeClass: 'figma-badge-lime' }
+                          return (
+                            <button
+                              key={persona.id}
+                              className="figma-persona-tile"
+                              onClick={() => {
+                                setShowLoginModal(false)
+                                handleLogin(persona)
+                              }}
+                              title={`Login as ${resolvePersonaName(persona)} (${persona.title})`}
+                            >
+                              <div className="figma-tile-avatar" style={{ background: persona.color }}>
+                                {resolvePersonaName(persona).charAt(0)}
+                              </div>
+                              <div className="figma-tile-info">
+                                <span className="figma-tile-name">{resolvePersonaName(persona)}</span>
+                                <span className="figma-tile-role">{persona.title} · {persona.jurisdiction?.label || persona.department}</span>
+                              </div>
+                              <span className={`figma-tile-tag ${meta.badgeClass}`}>
+                                {persona.role}
+                              </span>
+                            </button>
+                          )
+                        })}
+                    </div>
+
+                    {filteredPersonas.length === 0 && (
+                      <div style={{ textAlign: 'center', padding: '30px', color: '#666666', fontSize: 13 }}>
+                        No stakeholder matched "{loginSearch}". Try searching "Collector", "Kurnool", "NHAI", or "Landowner".
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* TAB 2: eHRMS GOVERNMENT SSO */}
+                {loginModalTab === 'ehrms' && (
+                  <div>
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault()
+                        setShowLoginModal(false)
+                        handleEhrmsAuth()
+                      }}
+                    >
+                      <div className="figma-form-group">
+                        <label className="figma-form-label">eHRMS Employee Single Sign-On ID:</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. EMP001"
+                          value={ehrmsEmployeeId}
+                          onChange={(e) => setEhrmsEmployeeId(e.target.value)}
+                          className="figma-form-input"
+                          autoFocus
+                        />
+                        <div style={{ marginTop: 12 }}>
+                          <span style={{ font: "600 11px 'DM Mono'", color: '#666666' }}>Quick-Select Test Official:</span>
+                          <div className="figma-presets-row">
+                            {[
+                              { id: 'EMP001', name: 'Dr. Verma (Collector Kurnool)' },
+                              { id: 'EMP002', name: 'K. Suresh (Collector Mahabubnagar)' },
+                              { id: 'EMP003', name: 'Rajesh T. (Collector Varanasi)' },
+                              { id: 'EMP-REV-01', name: 'M. Balaji (Tehsildar CALA)' },
+                              { id: 'EMP-SIA-01', name: 'Prof. Rao (SIA Reviewer)' },
+                            ].map((emp) => (
+                              <button
+                                key={emp.id}
+                                type="button"
+                                className="figma-preset-chip"
+                                onClick={() => setEhrmsEmployeeId(emp.id)}
+                              >
+                                <strong>{emp.id}</strong> — {emp.name}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
+                        type="submit"
+                        className="figma-btn-hero-primary"
+                        style={{ width: '100%', justifyContent: 'center', marginTop: 16 }}
+                        disabled={ehrmsLoading}
+                      >
+                        {ehrmsLoading ? 'Authenticating via eHRMS Parichay...' : 'Sign In with eHRMS Parichay SSO ➔'}
+                      </button>
+                    </form>
+                  </div>
+                )}
+
+                {/* TAB 3: CITIZEN LANDOWNER PORTAL */}
+                {loginModalTab === 'citizen' && (
+                  <div>
+                    <p style={{ font: "400 13.5px 'Plus Jakarta Sans'", color: '#444444', margin: '0 0 16px' }}>
+                      Public access for affected landowners, pattadars, and tenure holders. Inspect your land survey number, ULPIN verification, compensation entitlement, and objection hearing calendar.
+                    </p>
+
+                    <div style={{ marginBottom: 20 }}>
+                      <label className="figma-form-label">Select Registered Cadastral Landowner:</label>
+                      <div className="figma-citizen-profiles">
+                        {[
+                          { id: 'land_owner', name: 'Rameshwar Sharma', dist: 'Kurnool, AP', survey: 'Survey #1042/#1043' },
+                          { id: 'citizen_lakshmi', name: 'Smt. Lakshmi Bai', dist: 'Kurnool, AP', survey: 'Survey #1044' },
+                          { id: 'citizen_sunita', name: 'Sunita Devi', dist: 'Mahabubnagar, TS', survey: 'Survey #2041' },
+                          { id: 'citizen_vikram', name: 'Vikram Singh', dist: 'Varanasi, UP', survey: 'Survey #3012' },
+                        ].map((c) => {
+                          const persona = stakeholderPersonas.find((sp) => sp.id === c.id)
+                          return (
+                            <button
+                              key={c.id}
+                              type="button"
+                              className="figma-citizen-card"
+                              onClick={() => {
+                                if (persona) {
+                                  setShowLoginModal(false)
+                                  handleLogin(persona)
+                                }
+                              }}
+                            >
+                              <strong>{c.name}</strong>
+                              <small>{c.dist} · {c.survey}</small>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="figma-btn-hero-primary"
+                      style={{ width: '100%', justifyContent: 'center' }}
+                      onClick={() => {
+                        setShowLoginModal(false)
+                        handleCitizenLogin()
+                      }}
+                    >
+                      Enter Public Landowner Portal ➔
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Regimes Modal */}
         {showRegimesModal && (
@@ -2251,6 +2856,9 @@ export default function App() {
       </div>
     )
   }
+
+
+
 
   // ----------------------------------------------------
   // 2. MOCK eHRMS LOGIN PAGE SCREEN
@@ -4878,15 +5486,27 @@ export default function App() {
                       </div>
                       <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                         {workflowActions.map((wa) => (
-                          <span key={wa.action} style={{
-                            padding: '2px 6px',
-                            borderRadius: 3,
-                            font: '10px "DM Mono"',
-                            background: wa.variant === 'primary' ? '#d1fae5' : wa.variant === 'danger' ? '#fee2e2' : '#f3f4f6',
-                            color: wa.variant === 'primary' ? '#065f46' : wa.variant === 'danger' ? '#991b1b' : '#374151',
-                          }}>
+                          <button
+                            key={wa.action}
+                            type="button"
+                            onClick={() => {
+                              if (wa.action === 'approve') handleGateApprove()
+                              else if (wa.action === 'return') handleGateReject()
+                              else if (wa.action === 'view_documents') setGateDocs([...rfctlarrStages[currentStageIdx].requiredDocs])
+                            }}
+                            style={{
+                              padding: '3px 8px',
+                              borderRadius: 4,
+                              font: '10px "DM Mono"',
+                              background: wa.variant === 'primary' ? '#d1fae5' : wa.variant === 'danger' ? '#fee2e2' : '#f3f4f6',
+                              color: wa.variant === 'primary' ? '#065f46' : wa.variant === 'danger' ? '#991b1b' : '#374151',
+                              border: '1px solid transparent',
+                              cursor: 'pointer',
+                              fontWeight: 600,
+                            }}
+                          >
                             {wa.label}
-                          </span>
+                          </button>
                         ))}
                       </div>
                     </div>
@@ -4918,7 +5538,103 @@ export default function App() {
                 </div>
               )}
 
-              {/* Mandatory Documents Checklist */}
+              {/* Statutory Assets & Items Verified Card */}
+              {stageRelatedItemsMap[currentStageIdx] && (
+                <div style={{ background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: 8, padding: 14, marginBottom: 16 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ background: '#0284c7', color: '#fff', fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 3 }}>
+                        STATUTORY ASSETS & ITEMS VERIFIED
+                      </span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: '#0f172a' }}>
+                        {stageRelatedItemsMap[currentStageIdx].length} Items Inspected
+                      </span>
+                    </div>
+                    <span style={{ fontSize: 11, color: '#059669', fontWeight: 600 }}>
+                      ✓ All Records Synchronized with DILRMP & RoR
+                    </span>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                    {stageRelatedItemsMap[currentStageIdx].map((item, idx) => (
+                      <div key={idx} style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 6, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <strong style={{ fontSize: 12, color: '#1e293b' }}>{item.name}</strong>
+                          <span style={{
+                            fontSize: 9,
+                            fontWeight: 700,
+                            padding: '1px 5px',
+                            borderRadius: 3,
+                            background: item.status === 'verified' ? '#dcfce7' : item.status === 'approved' ? '#e0e7ff' : '#fef3c7',
+                            color: item.status === 'verified' ? '#15803d' : item.status === 'approved' ? '#4338ca' : '#b45309',
+                            textTransform: 'uppercase',
+                          }}>
+                            {item.status}
+                          </span>
+                        </div>
+                        <span style={{ fontSize: 11, color: '#64748b', lineHeight: 1.3 }}>{item.detail}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Role Delegation & Segregation of Duties Governance Banner */}
+              {(() => {
+                const designatedPersonaId = stageToPersonaMap[currentStageIdx]
+                const designatedPersona = stakeholderPersonas.find((p) => p.id === designatedPersonaId)
+                const isDirectRole = activePersona.id === designatedPersonaId
+                const isCollectorOversight =
+                  activePersona.id.startsWith('collector') ||
+                  activePersona.id === 'additional_collector' ||
+                  activePersona.id === 'government_dashboard' ||
+                  activePersona.id.startsWith('state_')
+
+                if (isDirectRole) {
+                  return (
+                    <div style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 6, padding: '8px 12px', marginBottom: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span style={{ fontSize: 12, color: '#166534', fontWeight: 600 }}>
+                        ✓ Designated Authority Active: <strong>{activePersona.name} ({activePersona.role})</strong> is authorized to sign this stage order.
+                      </span>
+                    </div>
+                  )
+                }
+
+                if (isCollectorOversight) {
+                  return (
+                    <div style={{ background: '#ecfdf5', border: '1px solid #6ee7b7', borderRadius: 6, padding: '8px 12px', marginBottom: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span style={{ fontSize: 12, color: '#065f46', fontWeight: 600 }}>
+                        ⚖ Executive Statutory Oversight: Acting under <strong>District Collector & CALA Statutory Powers</strong> (RFCTLARR Act 2013 §§11, 15, 30). Direct approval permitted.
+                      </span>
+                    </div>
+                  )
+                }
+
+                return (
+                  <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, padding: '10px 14px', marginBottom: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                    <div>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: '#92400e', letterSpacing: '0.05em' }}>
+                        SEGREGATION OF DUTIES (SoD) GOVERNANCE
+                      </div>
+                      <div style={{ fontSize: 12, color: '#78350f', marginTop: 2 }}>
+                        Current User: <strong>{activePersona.name} ({activePersona.role})</strong>. This stage requires statutory sign-off by <strong>{designatedPersona ? designatedPersona.name : rfctlarrStages[currentStageIdx].actor} ({rfctlarrStages[currentStageIdx].department})</strong>.
+                      </div>
+                    </div>
+                    {designatedPersona && (
+                      <button
+                        type="button"
+                        className="primary-button"
+                        style={{ background: '#d97706', borderColor: '#b45309', fontSize: 11, padding: '6px 12px' }}
+                        onClick={() => {
+                          setActivePersona(designatedPersona)
+                          showToast(`Delegated: Switched persona to ${designatedPersona.name} (${designatedPersona.role})`)
+                        }}
+                      >
+                        ⚡ Switch to {designatedPersona.role}
+                      </button>
+                    )}
+                  </div>
+                )
+              })()}
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                   <strong style={{ fontSize: 12, color: '#203b2c', letterSpacing: '0.05em' }}>
