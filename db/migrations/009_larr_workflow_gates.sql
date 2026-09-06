@@ -89,6 +89,10 @@
 
 BEGIN;
 
+-- Drop legacy FKs pointing to 7-stage legacy table so 15 statutory stages can be linked
+ALTER TABLE workflow_gate DROP CONSTRAINT IF EXISTS workflow_gate_from_stage_fkey;
+ALTER TABLE workflow_gate DROP CONSTRAINT IF EXISTS workflow_gate_to_stage_fkey;
+
 INSERT INTO workflow_gate (
     authority,
     from_stage,
