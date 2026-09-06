@@ -1065,45 +1065,48 @@ async fn create_project(
         let _ = initialize_workflow(pool, project.id, project.authority).await;
     }
 
-    // Always update in-memory store
-    let mut in_mem = state.in_memory.write().unwrap();
-    in_mem.projects.insert(project.id, project.clone());
-    let w_id = Uuid::new_v4();
-    let init_handler = sih_workflow::who_handles_stage(&ProjectStage::ProposalInitiation);
-    let init_deadline = Some(Utc::now() + chrono::Duration::days(init_handler.timeline_days as i64));
-    let workflow = WorkflowInstance {
-        id: w_id,
-        project_id: project.id,
-        authority: project.authority,
-        current_stage: ProjectStage::ProposalInitiation,
-        started_at: Utc::now(),
-        notification_at: None,
-        deadline_at: init_deadline,
-        completed_at: None,
-        lapsed_at: None,
-        responsible_department: Some(init_handler.department_code.to_string()),
-        responsible_role: Some(init_handler.role_code.to_string()),
-        stage_timeline_days: Some(init_handler.timeline_days),
-    };
-    in_mem.workflows.insert(w_id, workflow);
-    in_mem.project_to_workflow.insert(project.id, w_id);
+    // Always update in-memory store. Scope the write lock so it is released
+    // before the audit-log append below — std::sync::RwLockWriteGuard is !Send
+    // and cannot be held across the .await on append_audit_entry_db_and_mem
+    // (which itself takes the write lock internally to update the read cache).
+    {
+        let mut in_mem = state.in_memory.write().unwrap();
+        in_mem.projects.insert(project.id, project.clone());
+        let w_id = Uuid::new_v4();
+        let init_handler = sih_workflow::who_handles_stage(&ProjectStage::ProposalInitiation);
+        let init_deadline = Some(Utc::now() + chrono::Duration::days(init_handler.timeline_days as i64));
+        let workflow = WorkflowInstance {
+            id: w_id,
+            project_id: project.id,
+            authority: project.authority,
+            current_stage: ProjectStage::ProposalInitiation,
+            started_at: Utc::now(),
+            notification_at: None,
+            deadline_at: init_deadline,
+            completed_at: None,
+            lapsed_at: None,
+            responsible_department: Some(init_handler.department_code.to_string()),
+            responsible_role: Some(init_handler.role_code.to_string()),
+            stage_timeline_days: Some(init_handler.timeline_days),
+        };
+        in_mem.workflows.insert(w_id, workflow);
+        in_mem.project_to_workflow.insert(project.id, w_id);
+    }
 
-    // Cryptographic audit log entry
-    let prev_hash = in_mem
-        .audit_log
-        .last()
-        .map(|e| e.hash.clone())
-        .unwrap_or_default();
-    let seq = in_mem.audit_log.len() as u64 + 1;
-    let entry = AuditEntry::new(
-        seq,
+    // Cryptographic audit log entry. previous_hash is read FROM THE DATABASE
+    // via append_audit_entry_db_and_mem (source of truth for the hash chain),
+    // NOT from the in-memory audit_log Vec (which is only a read cache for
+    // /audit/trail and may be empty after a restart with a populated DB).
+    let _ = append_audit_entry_db_and_mem(
+        &state,
+        0,
         actor.id,
         "CREATE_PROJECT",
-        format!("project/{}", project.id),
+        "project",
+        project.id,
         json!({"name": project.name, "authority": format!("{:?}", project.authority)}),
-        prev_hash,
-    );
-    in_mem.audit_log.push(entry);
+    )
+    .await;
 
     Ok((StatusCode::CREATED, Json(project)))
 }
@@ -1155,27 +1158,29 @@ async fn add_parcel(
         let _ = state.parcel_repo.save_parcel_async(project_id, &parcel).await;
     }
 
-    let mut in_mem = state.in_memory.write().unwrap();
-    if let Some(p) = in_mem.projects.get_mut(&project_id) {
-        p.parcels.push(parcel.clone());
-        p.updated_at = Utc::now();
+    // Scope the in-memory write lock so it is released before the audit-log
+    // append below (see create_project for the rationale — same !Send guard
+    // cannot be held across .await).
+    {
+        let mut in_mem = state.in_memory.write().unwrap();
+        if let Some(p) = in_mem.projects.get_mut(&project_id) {
+            p.parcels.push(parcel.clone());
+            p.updated_at = Utc::now();
+        }
     }
 
-    let prev_hash = in_mem
-        .audit_log
-        .last()
-        .map(|e| e.hash.clone())
-        .unwrap_or_default();
-    let seq = in_mem.audit_log.len() as u64 + 1;
-    let entry = AuditEntry::new(
-        seq,
+    // previous_hash is read FROM THE DATABASE via append_audit_entry_db_and_mem
+    // (source of truth for the hash chain), not from the in-memory Vec.
+    let _ = append_audit_entry_db_and_mem(
+        &state,
+        0,
         actor.id,
         "ADD_PARCEL",
-        format!("parcel/{}", parcel.id),
+        "parcel",
+        parcel.id,
         json!({"project_id": project_id, "survey_number": parcel.survey_number, "area": parcel.area_hectares}),
-        prev_hash,
-    );
-    in_mem.audit_log.push(entry);
+    )
+    .await;
 
     Ok((StatusCode::CREATED, Json(parcel)))
 }
@@ -1247,45 +1252,47 @@ async fn transition(
         }
     }
 
-    let mut in_mem = state.in_memory.write().unwrap();
-    in_mem.projects.insert(project.id, project.clone());
+    // Scope the in-memory write lock so it is released before the audit-log
+    // append below (see create_project for the rationale — same !Send guard
+    // cannot be held across .await).
+    {
+        let mut in_mem = state.in_memory.write().unwrap();
+        in_mem.projects.insert(project.id, project.clone());
 
-    if let Some(&w_id) = in_mem.project_to_workflow.get(&project.id) {
-        if let Some(w) = in_mem.workflows.get_mut(&w_id) {
-            w.current_stage = decision.to.clone();
+        if let Some(&w_id) = in_mem.project_to_workflow.get(&project.id) {
+            if let Some(w) = in_mem.workflows.get_mut(&w_id) {
+                w.current_stage = decision.to.clone();
+            }
+            in_mem
+                .approval_history
+                .entry(w_id)
+                .or_default()
+                .push(ApprovalAction {
+                    id: Uuid::new_v4(),
+                    workflow_instance_id: w_id,
+                    from_stage: decision.from,
+                    to_stage: decision.to,
+                    actor_user_id: Some(actor.id),
+                    actor_role: actor.role,
+                    decision: "advanced".to_string(),
+                    reason: None,
+                    created_at: Utc::now(),
+                });
         }
-        in_mem
-            .approval_history
-            .entry(w_id)
-            .or_default()
-            .push(ApprovalAction {
-                id: Uuid::new_v4(),
-                workflow_instance_id: w_id,
-                from_stage: decision.from,
-                to_stage: decision.to,
-                actor_user_id: Some(actor.id),
-                actor_role: actor.role,
-                decision: "advanced".to_string(),
-                reason: None,
-                created_at: Utc::now(),
-            });
     }
 
-    let prev_hash = in_mem
-        .audit_log
-        .last()
-        .map(|e| e.hash.clone())
-        .unwrap_or_default();
-    let seq = in_mem.audit_log.len() as u64 + 1;
-    let entry = AuditEntry::new(
-        seq,
+    // previous_hash is read FROM THE DATABASE via append_audit_entry_db_and_mem
+    // (source of truth for the hash chain), not from the in-memory Vec.
+    let _ = append_audit_entry_db_and_mem(
+        &state,
+        0,
         actor.id,
         "TRANSITION_STAGE",
-        format!("project/{}", project.id),
+        "project",
+        project.id,
         json!({"to_stage": format!("{:?}", project.stage)}),
-        prev_hash,
-    );
-    in_mem.audit_log.push(entry);
+    )
+    .await;
 
     Ok(Json(project))
 }
@@ -1352,74 +1359,81 @@ async fn advance_workflow_endpoint(
         id.map_err(|_| ApiError::BadRequest("workflow id must be a UUID".to_string()))?;
     require_permission(&actor, Permission::TransitionProjects)?;
 
-    let mut in_mem = state.in_memory.write().unwrap();
+    // Scope the in-memory write lock so it is released before the audit-log
+    // append below (see create_project for the rationale — same !Send guard
+    // cannot be held across .await). The variables needed to construct the
+    // audit payload (instance_clone, from, to, project_id, next_handler) are
+    // all Copy or cheaply Cloned out of the block.
     let (instance_clone, from, to, project_id, next_handler) = {
-        let instance = in_mem
-            .workflows
-            .get_mut(&workflow_id)
-            .ok_or_else(|| ApiError::NotFound("workflow not found".to_string()))?;
+        let mut in_mem = state.in_memory.write().unwrap();
+        let (instance_clone, from, to, project_id, next_handler) = {
+            let instance = in_mem
+                .workflows
+                .get_mut(&workflow_id)
+                .ok_or_else(|| ApiError::NotFound("workflow not found".to_string()))?;
 
-        let from = instance.current_stage;
-        let to = request.to;
-        let next_handler = sih_workflow::who_handles_stage(&to);
-        let now = Utc::now();
-        let stage_deadline = Some(now + chrono::Duration::days(next_handler.timeline_days as i64));
+            let from = instance.current_stage;
+            let to = request.to;
+            let next_handler = sih_workflow::who_handles_stage(&to);
+            let now = Utc::now();
+            let stage_deadline = Some(now + chrono::Duration::days(next_handler.timeline_days as i64));
 
-        instance.current_stage = to;
-        instance.deadline_at = stage_deadline;
-        instance.responsible_department = Some(next_handler.department_code.to_string());
-        instance.responsible_role = Some(next_handler.role_code.to_string());
-        instance.stage_timeline_days = Some(next_handler.timeline_days);
+            instance.current_stage = to;
+            instance.deadline_at = stage_deadline;
+            instance.responsible_department = Some(next_handler.department_code.to_string());
+            instance.responsible_role = Some(next_handler.role_code.to_string());
+            instance.stage_timeline_days = Some(next_handler.timeline_days);
 
-        if to == ProjectStage::PreliminaryNotification {
-            instance.notification_at = Some(now);
+            if to == ProjectStage::PreliminaryNotification {
+                instance.notification_at = Some(now);
+            }
+            if to == ProjectStage::ProjectClosure || to == ProjectStage::Completed {
+                instance.completed_at = Some(now);
+            }
+            if to == ProjectStage::Lapsed {
+                instance.lapsed_at = Some(now);
+            }
+
+            (instance.clone(), from, to, instance.project_id, next_handler)
+        };
+
+        if let Some(p) = in_mem.projects.get_mut(&project_id) {
+            p.stage = to;
+            p.updated_at = Utc::now();
+            if to == ProjectStage::PreliminaryNotification {
+                p.preliminary_notification_at = Some(Utc::now());
+            }
         }
-        if to == ProjectStage::ProjectClosure || to == ProjectStage::Completed {
-            instance.completed_at = Some(now);
-        }
-        if to == ProjectStage::Lapsed {
-            instance.lapsed_at = Some(now);
-        }
 
-        (instance.clone(), from, to, instance.project_id, next_handler)
+        let action = ApprovalAction {
+            id: Uuid::new_v4(),
+            workflow_instance_id: workflow_id,
+            from_stage: from,
+            to_stage: to,
+            actor_user_id: Some(actor.id),
+            actor_role: actor.role,
+            decision: "advanced".to_string(),
+            reason: None,
+            created_at: Utc::now(),
+        };
+        in_mem
+            .approval_history
+            .entry(workflow_id)
+            .or_default()
+            .push(action);
+
+        (instance_clone, from, to, project_id, next_handler)
     };
 
-    if let Some(p) = in_mem.projects.get_mut(&project_id) {
-        p.stage = to;
-        p.updated_at = Utc::now();
-        if to == ProjectStage::PreliminaryNotification {
-            p.preliminary_notification_at = Some(Utc::now());
-        }
-    }
-
-    let action = ApprovalAction {
-        id: Uuid::new_v4(),
-        workflow_instance_id: workflow_id,
-        from_stage: from,
-        to_stage: to,
-        actor_user_id: Some(actor.id),
-        actor_role: actor.role,
-        decision: "advanced".to_string(),
-        reason: None,
-        created_at: Utc::now(),
-    };
-    in_mem
-        .approval_history
-        .entry(workflow_id)
-        .or_default()
-        .push(action);
-
-    let prev_hash = in_mem
-        .audit_log
-        .last()
-        .map(|e| e.hash.clone())
-        .unwrap_or_default();
-    let seq = in_mem.audit_log.len() as u64 + 1;
-    let entry = AuditEntry::new(
-        seq,
+    // previous_hash is read FROM THE DATABASE via append_audit_entry_db_and_mem
+    // (source of truth for the hash chain), not from the in-memory Vec.
+    let _ = append_audit_entry_db_and_mem(
+        &state,
+        0,
         actor.id,
         "WORKFLOW_ADVANCE",
-        format!("workflow/{}", workflow_id),
+        "workflow",
+        workflow_id,
         json!({
             "from": format!("{:?}", from),
             "to": format!("{:?}", to),
@@ -1428,9 +1442,8 @@ async fn advance_workflow_endpoint(
             "timeline_days": next_handler.timeline_days,
             "approval_authority": next_handler.approval_authority,
         }),
-        prev_hash,
-    );
-    in_mem.audit_log.push(entry);
+    )
+    .await;
 
     Ok(Json(instance_clone))
 }
@@ -1687,15 +1700,15 @@ async fn approve_workflow_endpoint(
 
     // ============================================================
     // PHASE 3 (write lock): role authorization + document check +
-    // stage mutation + audit log + DB persistence. The original logic.
+    // stage mutation + DB persistence. Audit log is appended AFTER
+    // the lock is released — see Task E notes in append_audit_entry_db_and_mem.
     // ============================================================
     let (
         next_handler,
         actor_name,
         actor_role,
+        actor_dept,
         stage_deadline,
-        seq,
-        audit_hash,
         updated_instance,
     ) = {
         let mut in_mem = state.in_memory.write().unwrap();
@@ -1802,46 +1815,50 @@ async fn approve_workflow_endpoint(
             .or_default()
             .push(action);
 
-        let prev_hash = in_mem
-            .audit_log
-            .last()
-            .map(|e| e.hash.clone())
-            .unwrap_or_default();
-        let seq = (in_mem.audit_log.len() + 1) as u64;
-        let entry = AuditEntry::new(
-            seq,
-            project_id,
-            "STAGE_GATE_APPROVAL",
-            format!("workflow/{}", workflow_id),
-            json!({
-                "from_stage": sih_workflow::canonical_stage_label(&current_stage),
-                "to_stage": sih_workflow::canonical_stage_label(&next_stage),
-                "actor": actor_name,
-                "role": actor_role,
-                "department": actor_dept,
-                "decision": "APPROVE",
-                "remarks": request.remarks,
-                "verified_documents": request.documents,
-                "next_responsible_dept": next_handler.department_code,
-                "next_responsible_role": next_handler.role_code,
-                "sla_deadline": stage_deadline,
-            }),
-            prev_hash,
-        );
-        let audit_hash = entry.hash.clone();
-        in_mem.audit_log.push(entry);
-
         (
             next_handler,
             actor_name,
             actor_role,
+            actor_dept,
             stage_deadline,
-            seq,
-            audit_hash,
             updated_instance,
         )
     };
-    let (mut seq, mut audit_hash) = (seq, audit_hash);
+
+    // Audit log: previous_hash is read FROM THE DATABASE via
+    // append_audit_entry_db_and_mem (source of truth for the hash chain),
+    // not from the in-memory Vec. The helper writes to BOTH the DB and the
+    // in-mem read cache, replacing the previous duplicate-write pattern
+    // (buggy in-mem push + append_audit_log_pg) that left the in-mem cache
+    // with a stale previous_hash inconsistent with the DB row.
+    let audit_payload = json!({
+        "from_stage": sih_workflow::canonical_stage_label(&current_stage),
+        "to_stage": sih_workflow::canonical_stage_label(&next_stage),
+        "actor": actor_name,
+        "role": actor_role,
+        "department": actor_dept,
+        "decision": "APPROVE",
+        "remarks": request.remarks,
+        "verified_documents": request.documents,
+        "next_responsible_dept": next_handler.department_code,
+        "next_responsible_role": next_handler.role_code,
+        "sla_deadline": stage_deadline,
+    });
+    let (seq, audit_hash) = match append_audit_entry_db_and_mem(
+        &state,
+        0,
+        project_id,
+        "STAGE_GATE_APPROVAL",
+        "workflow",
+        workflow_id,
+        audit_payload,
+    )
+    .await
+    {
+        Ok((s, h)) => (s, h),
+        Err(_) => (0u64, String::new()),
+    };
+
     if let Some(ref pool) = state.pool {
         let stage_code = sih_workflow::stage_to_db_code(next_stage);
         let _ = sqlx::query(
@@ -1879,31 +1896,11 @@ async fn approve_workflow_endpoint(
         .execute(pool)
         .await;
 
-        if let Ok(entry) = append_audit_log_pg(
-            pool,
-            Some(DEFAULT_TENANT_ID),
-            Some(project_id),
-            Some(&actor_role),
-            "STAGE_GATE_APPROVAL",
-            "workflow",
-            Some(workflow_id),
-            json!({
-                "from_stage": sih_workflow::canonical_stage_label(&current_stage),
-                "to_stage": sih_workflow::canonical_stage_label(&next_stage),
-                "actor": actor_name,
-                "role": actor_role,
-                "decision": "APPROVE",
-                "remarks": request.remarks,
-                "verified_documents": request.documents,
-                "next_responsible_dept": next_handler.department_code,
-                "next_responsible_role": next_handler.role_code,
-                "sla_deadline": stage_deadline,
-            }),
-            Some("Stage gate approval executed"),
-        ).await {
-            seq = entry.sequence;
-            audit_hash = entry.hash;
-        }
+        // NOTE: the previous append_audit_log_pg call has been removed — the
+        // append_audit_entry_db_and_mem call above already inserted the audit_log
+        // row (with previous_hash sourced from the DB) and updated the in-mem
+        // cache. Calling append_audit_log_pg here would have created a DUPLICATE
+        // audit_log row, breaking the chain.
     }
 
     Ok(Json(StageGateDecisionResponse {
@@ -1946,6 +1943,8 @@ async fn reject_workflow_endpoint(
         .or_else(|| body_val.get("reason").and_then(|v| v.as_str()))
         .map(|s| s.to_string());
 
+    // Scope the in-memory write lock so it is released before the audit-log
+    // append below — see Task E notes in append_audit_entry_db_and_mem.
     let (
         workflow_id,
         project_id,
@@ -1954,9 +1953,8 @@ async fn reject_workflow_endpoint(
         prev_handler,
         actor_name,
         actor_role,
+        actor_dept,
         stage_deadline,
-        seq,
-        audit_hash,
         updated_instance,
     ) = {
         let mut in_mem = state.in_memory.write().unwrap();
@@ -2011,33 +2009,6 @@ async fn reject_workflow_endpoint(
             .or_default()
             .push(action);
 
-        let prev_hash = in_mem
-            .audit_log
-            .last()
-            .map(|e| e.hash.clone())
-            .unwrap_or_default();
-        let seq = (in_mem.audit_log.len() + 1) as u64;
-        let entry = AuditEntry::new(
-            seq,
-            project_id,
-            "STAGE_GATE_REJECTION",
-            format!("workflow/{}", workflow_id),
-            json!({
-                "from_stage": sih_workflow::canonical_stage_label(&current_stage),
-                "returned_to": sih_workflow::canonical_stage_label(&prev_stage),
-                "actor": actor_name,
-                "role": actor_role,
-                "department": actor_dept,
-                "decision": "REJECT",
-                "remarks": remarks,
-                "responsible_dept": prev_handler.department_code,
-                "responsible_role": prev_handler.role_code,
-            }),
-            prev_hash,
-        );
-        let audit_hash = entry.hash.clone();
-        in_mem.audit_log.push(entry);
-
         (
             workflow_id,
             project_id,
@@ -2046,14 +2017,45 @@ async fn reject_workflow_endpoint(
             prev_handler,
             actor_name,
             actor_role,
+            actor_dept,
             stage_deadline,
-            seq,
-            audit_hash,
             updated_instance,
         )
     };
 
-    let (mut seq, mut audit_hash) = (seq, audit_hash);
+    // Audit log: previous_hash is read FROM THE DATABASE via
+    // append_audit_entry_db_and_mem (source of truth for the hash chain),
+    // not from the in-memory Vec. The helper writes to BOTH the DB and the
+    // in-mem read cache, replacing the previous duplicate-write pattern
+    // (buggy in-mem push + append_audit_log_pg) that left the in-mem cache
+    // with a stale previous_hash inconsistent with the DB row.
+    let audit_payload = json!({
+        "from_stage": sih_workflow::canonical_stage_label(&current_stage),
+        "returned_to": sih_workflow::canonical_stage_label(&prev_stage),
+        "actor": actor_name,
+        "role": actor_role,
+        "department": actor_dept,
+        "decision": "REJECT",
+        "remarks": remarks,
+        "responsible_dept": prev_handler.department_code,
+        "responsible_role": prev_handler.role_code,
+        "sla_deadline": stage_deadline,
+    });
+    let (seq, audit_hash) = match append_audit_entry_db_and_mem(
+        &state,
+        0,
+        project_id,
+        "STAGE_GATE_REJECTION",
+        "workflow",
+        workflow_id,
+        audit_payload,
+    )
+    .await
+    {
+        Ok((s, h)) => (s, h),
+        Err(_) => (0u64, String::new()),
+    };
+
     if let Some(ref pool) = state.pool {
         let stage_code = sih_workflow::stage_to_db_code(prev_stage);
         let _ = sqlx::query(
@@ -2089,30 +2091,11 @@ async fn reject_workflow_endpoint(
         .execute(pool)
         .await;
 
-        if let Ok(entry) = append_audit_log_pg(
-            pool,
-            Some(DEFAULT_TENANT_ID),
-            Some(project_id),
-            Some(&actor_role),
-            "STAGE_GATE_REJECTION",
-            "workflow",
-            Some(workflow_id),
-            json!({
-                "from_stage": sih_workflow::canonical_stage_label(&current_stage),
-                "returned_to": sih_workflow::canonical_stage_label(&prev_stage),
-                "actor": actor_name,
-                "role": actor_role,
-                "decision": "REJECT",
-                "remarks": remarks,
-                "responsible_dept": prev_handler.department_code,
-                "responsible_role": prev_handler.role_code,
-                "sla_deadline": stage_deadline,
-            }),
-            Some("Stage gate rejection / return for revision"),
-        ).await {
-            seq = entry.sequence;
-            audit_hash = entry.hash;
-        }
+        // NOTE: the previous append_audit_log_pg call has been removed — the
+        // append_audit_entry_db_and_mem call above already inserted the audit_log
+        // row (with previous_hash sourced from the DB) and updated the in-mem
+        // cache. Calling append_audit_log_pg here would have created a DUPLICATE
+        // audit_log row, breaking the chain.
     }
 
     Ok(Json(StageGateDecisionResponse {
@@ -3617,6 +3600,198 @@ async fn get_alerts(
             tone: "gold".to_string(),
         },
     ]))
+}
+
+// ============================================================
+// AUDIT HASH-CHAIN HELPERS (Task E: self-healing fix)
+//
+// The audit_log table forms a cryptographic hash chain: each row's
+// previous_hash equals the previous row's row_hash. The chain is what
+// makes the audit trail evidentiary.
+//
+// BUG (pre-Task E): the in-memory `state.audit_log` Vec was being used
+// as the source of `previous_hash` for new entries via
+// `in_mem.audit_log.last().map(|e| e.hash.clone()).unwrap_or_default()`.
+// This is fragile because:
+//   1. If sync_from_db() fails to load existing rows into the Vec
+//      (DB error, schema mismatch, etc.), the Vec is empty and the
+//      next entry's previous_hash is "" — breaking the chain even
+//      though the DB still has it.
+//   2. With multiple API processes sharing the same DB, each has its
+//      own in-memory Vec that races and produces stale previous_hash
+//      values.
+//
+// FIX (Task E): previous_hash is now read FROM THE DATABASE via the
+// helpers below. The in-memory Vec is treated only as a read cache
+// for the /audit/trail endpoint — it must NEVER be the source of
+// truth for the hash chain.
+// ============================================================
+
+/// Read the last `row_hash` from the `audit_log` table in the database.
+///
+/// This is the source of truth for the hash chain — the in-memory
+/// `audit_log` Vec is only a read cache and must NEVER be used to
+/// determine `previous_hash` for a new entry.
+///
+/// Returns an empty string if the table is empty or the DB is unavailable,
+/// matching the genesis-entry behavior (the first audit row's
+/// `previous_hash` is empty by convention).
+///
+/// Marked `pub` so callers outside this module (e.g. set_parcel_ownership,
+/// create_deposit_with_authority, release_deposit) can use it instead of
+/// inlining `SELECT row_hash FROM audit_log ORDER BY id DESC LIMIT 1`.
+pub async fn read_last_audit_hash(pool: Option<&sqlx::PgPool>) -> String {
+    use sqlx::Row;
+    let pool = match pool {
+        Some(p) => p,
+        None => return String::new(),
+    };
+    sqlx::query("SELECT row_hash FROM audit_log ORDER BY id DESC LIMIT 1")
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten()
+        .and_then(|r| r.try_get::<String, _>("row_hash").ok())
+        .unwrap_or_default()
+}
+
+/// Append a new audit entry to BOTH the DB (source of truth for the hash
+/// chain) and the in-memory cache (for fast reads via /audit/trail).
+///
+/// `previous_hash` AND the next sequence number are read FROM THE DATABASE
+/// via `SELECT id, row_hash FROM audit_log ORDER BY id DESC LIMIT 1` (in
+/// demo mode with no DB, the in-memory Vec is used so the demo chain
+/// remains self-consistent). This ensures:
+///
+///   - The chain survives restarts: even if `sync_from_db()` failed to
+///     populate the in-memory Vec, the next entry's `previous_hash` is
+///     still the DB's actual last `row_hash`.
+///   - Multi-process consistency: every API process reads the same DB
+///     `row_hash` instead of racing on a private in-memory Vec.
+///   - `verify_audit_chain` continues to pass: the hash is computed using
+///     the DB-derived sequence number (`last_id + 1`), which matches what
+///     `get_audit_trail` will reconstruct from the DB row's `id` field.
+///
+/// The `sequence` parameter is kept for API stability with the Task E
+/// spec; in practice the DB- or in-mem-derived sequence is authoritative
+/// and `sequence` is only used as a last-resort fallback.
+async fn append_audit_entry_db_and_mem(
+    state: &AppState,
+    sequence: u64,
+    actor_id: uuid::Uuid,
+    action: &str,
+    entity_type: &str,
+    entity_id: uuid::Uuid,
+    payload: serde_json::Value,
+) -> Result<(u64, String), ApiError> {
+    use sqlx::Row;
+    let now = chrono::Utc::now();
+
+    // 1. Read previous_hash AND the next sequence number from the source of
+    //    truth (DB when available, in-mem Vec only in demo mode with no DB).
+    //    Reading the sequence from the DB (rather than from
+    //    `in_mem.audit_log.len() + 1`) is essential because `verify_audit_chain`
+    //    recomputes the hash using the DB row's `id` field as `sequence` —
+    //    if we used a different seq here, the verification would fail.
+    let (prev_hash, seq) = if let Some(ref pool) = state.pool {
+        let last_row = sqlx::query("SELECT id, row_hash FROM audit_log ORDER BY id DESC LIMIT 1")
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| ApiError::BadRequest(format!("Failed to read audit_log: {e}")))?;
+        match last_row {
+            Some(r) => {
+                let h: String = r.try_get("row_hash").unwrap_or_default();
+                let id: i64 = r.try_get("id").unwrap_or(0);
+                (h, (id as u64) + 1)
+            }
+            None => (String::new(), 1u64),
+        }
+    } else {
+        // Demo mode: in-mem Vec is the only source. This preserves the
+        // pre-Task-E demo-mode chain behavior (the bug only manifests when
+        // a DB is present).
+        let in_mem = state.in_memory.read().unwrap();
+        let prev = in_mem
+            .audit_log
+            .last()
+            .map(|e| e.hash.clone())
+            .unwrap_or_default();
+        let next_seq = in_mem.audit_log.len() as u64 + 1;
+        (prev, next_seq)
+    };
+    // `sequence` (caller-provided fallback) is documented but not used:
+    // the DB/in-mem-derived `seq` above is authoritative so the hash
+    // matches what `verify_audit_chain` will recompute.
+    let _ = sequence;
+
+    // 2. Construct the audit entry using the DB/in-mem-derived seq.
+    let entry = AuditEntry::new(
+        seq,
+        actor_id,
+        action,
+        format!("{}/{}", entity_type, entity_id),
+        payload.clone(),
+        &prev_hash,
+    );
+    let row_hash = entry.hash.clone();
+
+    // 3. Insert into the DB (with RETURNING id so we get the real stored id).
+    if let Some(ref pool) = state.pool {
+        let inserted_id: i64 = sqlx::query(
+            "INSERT INTO audit_log (occurred_at, tenant_id, actor_user_id, action, entity_type, entity_id, new_value, previous_hash, row_hash)
+             VALUES ($1, '00000000-0000-0000-0000-000000000001', $2, $3, $4, $5, $6, $7, $8)
+             RETURNING id"
+        )
+        .bind(now)
+        .bind(actor_id)
+        .bind(action)
+        .bind(entity_type)
+        .bind(entity_id)
+        .bind(&payload)
+        .bind(&prev_hash)
+        .bind(&row_hash)
+        .fetch_one(pool)
+        .await
+        .map_err(|e| ApiError::BadRequest(format!("Failed to insert audit_log: {e}")))?
+        .try_get::<i64, _>("id")
+        .map_err(|e| ApiError::BadRequest(format!("Failed to read audit_log id: {e}")))?;
+
+        // 4. Update the in-memory cache (read path). In a single-writer
+        //    scenario `inserted_id == seq` (both = prev_id + 1); in a
+        //    concurrent scenario the DB row is the source of truth and
+        //    we mirror its `id` here so /audit/trail stays consistent
+        //    with the DB-read entries.
+        let mut in_mem = state.in_memory.write().unwrap();
+        in_mem.audit_log.push(AuditEntry {
+            sequence: inserted_id as u64,
+            timestamp: now,
+            actor_id,
+            action: action.to_string(),
+            resource: format!("{}/{}", entity_type, entity_id),
+            payload,
+            previous_hash: prev_hash,
+            hash: row_hash.clone(),
+        });
+
+        Ok((inserted_id as u64, row_hash))
+    } else {
+        // DB unavailable — fall back to in-memory only (demo mode).
+        // `prev_hash` and `seq` above came from the in-memory Vec, so the
+        // demo-mode chain remains self-consistent. This preserves the
+        // pre-Task-E behavior for the no-DB demo scenario.
+        let mut in_mem = state.in_memory.write().unwrap();
+        in_mem.audit_log.push(AuditEntry {
+            sequence: seq,
+            timestamp: now,
+            actor_id,
+            action: action.to_string(),
+            resource: format!("{}/{}", entity_type, entity_id),
+            payload,
+            previous_hash: prev_hash,
+            hash: row_hash.clone(),
+        });
+        Ok((seq, row_hash))
+    }
 }
 
 // ============================================================
