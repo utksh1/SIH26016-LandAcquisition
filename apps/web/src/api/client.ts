@@ -440,9 +440,9 @@ export interface ReleaseDepositRequest {
   actor?: string
 }
 
-const defaultBaseUrl = 'http://localhost:3000'
+const defaultBaseUrl = ''
 const envBaseUrl = (import.meta.env.VITE_API_URL as string | undefined)?.trim().replace(/\/$/, '')
-const activeBaseUrl = envBaseUrl || defaultBaseUrl
+const activeBaseUrl = envBaseUrl !== undefined ? envBaseUrl : defaultBaseUrl
 let activeToken: string | undefined = (import.meta.env.VITE_API_TOKEN as string | undefined)?.trim()
 
 export const setApiToken = (token: string | undefined) => {
