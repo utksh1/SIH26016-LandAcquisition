@@ -3854,6 +3854,7 @@ async fn create_deposit_with_authority(
         .fetch_optional(pool)
         .await
         .ok()
+        .flatten()
         .and_then(|r| r.try_get::<String, _>("row_hash").ok())
         .unwrap_or_default();
     let payload = json!({
@@ -3931,6 +3932,7 @@ async fn release_deposit(
         .fetch_optional(pool)
         .await
         .ok()
+        .flatten()
         .and_then(|r| r.try_get::<String, _>("row_hash").ok())
         .unwrap_or_default();
     let payload = json!({

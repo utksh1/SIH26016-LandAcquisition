@@ -623,7 +623,7 @@ pub fn check_timeline_gates(
     let stay_active = stays.iter().any(|(from, to)| *from <= now && now <= *to);
     if stay_active {
         return Err(GateFailure {
-            code: "court_stay_active".to_string(),
+            code: "court_stay_active",
             message: "A court stay is currently in effect on this project. No stage \
                       transitions may proceed until the stay is vacated (RFCTLARR Act \
                       2013 — court-stay day exclusion per Master PDF §36)."
@@ -639,7 +639,7 @@ pub fn check_timeline_gates(
         if let Some(notified_at) = project.preliminary_notification_at {
             if !timeline::declaration_within_12_months(notified_at, now) {
                 return Err(GateFailure {
-                    code: "declaration_window_expired".to_string(),
+                    code: "declaration_window_expired",
                     message: format!(
                         "The Section 11 preliminary notification was issued on {} — more \
                          than 12 months ago. Under RFCTLARR Act 2013 §22.3 / NH Act, \
@@ -662,7 +662,7 @@ pub fn check_timeline_gates(
         if let Some(notified_at) = project.preliminary_notification_at {
             if timeline::objection_window_open(notified_at, project.authority, now) {
                 return Err(GateFailure {
-                    code: "objection_window_still_open".to_string(),
+                    code: "objection_window_still_open",
                     message: format!(
                         "The statutory objection window is still open ({}-day period \
                          from Section 11 notification on {}). Hearings cannot be \
@@ -689,7 +689,7 @@ pub fn check_timeline_gates(
                         0
                     };
                     return Err(GateFailure {
-                        code: "possession_before_80pct_payment".to_string(),
+                        code: "possession_before_80pct_payment",
                         message: format!(
                             "Possession (Section 38) requires at least 80% of awarded \
                              compensation to be paid. Currently paid: {} paise of {} \
