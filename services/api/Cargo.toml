@@ -16,6 +16,7 @@ uuid.workspace = true
 sih-domain = { path = "../domain" }
 sih-workflow = { path = "../workflow" }
 sih-integrations = { path = "../integrations" }
+sih-jobs = { path = "../jobs" }
 
 [dev-dependencies]
 tower = "0.5"

@@ -28,8 +28,32 @@ async fn main() {
         None
     };
 
-    let state = AppState::new(pool, auth);
+    let state = AppState::new(pool.clone(), auth);
     state.sync_from_db().await;
+
+    // ============================================================
+    // SPAWN ALERTS BACKGROUND JOB (Master PDF §39)
+    // Scans workflow_instance deadlines every 5 minutes and inserts
+    // alerts into the alert table with escalating severity:
+    //   - 31-90 days remaining -> low
+    //   -  8-30 days remaining -> medium
+    //   -   1-7 days remaining -> high
+    //   -   <=0 days remaining -> critical (breached)
+    // Idempotent within a 24-hour window per (project_id, alert_type,
+    // severity) so severity escalates cleanly without duplicates.
+    // First scan runs immediately on startup so the job catches up
+    // after a restart.
+    // ============================================================
+    if let Some(ref pool) = pool {
+        let alerts_pool = pool.clone();
+        let alerts_interval = sih_jobs::DEFAULT_SCAN_INTERVAL;
+        tokio::spawn(async move {
+            println!("Spawning alerts background job (scan every {:?})", alerts_interval);
+            sih_jobs::run_alerts_loop(alerts_pool, alerts_interval).await;
+        });
+    } else {
+        eprintln!("Alerts background job not started: no database pool available.");
+    }
     
     let listener = tokio::net::TcpListener::bind(address)
         .await
