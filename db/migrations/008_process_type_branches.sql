@@ -74,8 +74,8 @@ INSERT INTO parcel (
     6.400000,
     'under_process',
     'KUR',
-    '{"type":"Polygon","coordinates":[[[78.00,15.82],[78.10,15.82],[78.10,15.84],[78.00,15.84],[78.00,15.82]]]}'::jsonb,
-    '{"type":"Point","coordinates":[78.050,15.830]}'::jsonb
+    ST_GeomFromText('POLYGON((78.00 15.82,78.10 15.82,78.10 15.84,78.00 15.84,78.00 15.82))', 4326),
+    ST_SetSRID(ST_Point(78.050, 15.830), 4326)
 )
 ON CONFLICT (id) DO NOTHING;
 
@@ -124,8 +124,8 @@ INSERT INTO parcel (
     412.000000,
     'under_process',
     'KUR',
-    '{"type":"Polygon","coordinates":[[[78.10,15.75],[78.20,15.75],[78.20,15.85],[78.10,15.85],[78.10,15.75]]]}'::jsonb,
-    '{"type":"Point","coordinates":[78.150,15.800]}'::jsonb
+    ST_GeomFromText('POLYGON((78.10 15.75,78.20 15.75,78.20 15.85,78.10 15.85,78.10 15.75))', 4326),
+    ST_SetSRID(ST_Point(78.150, 15.800), 4326)
 )
 ON CONFLICT (id) DO NOTHING;
 
@@ -174,8 +174,8 @@ INSERT INTO parcel (
     18.600000,
     'under_process',
     'AMR',
-    '{"type":"Polygon","coordinates":[[[80.48,16.50],[80.56,16.50],[80.56,16.55],[80.48,16.55],[80.48,16.50]]]}'::jsonb,
-    '{"type":"Point","coordinates":[80.520,16.525]}'::jsonb
+    ST_GeomFromText('POLYGON((80.48 16.50,80.56 16.50,80.56 16.55,80.48 16.55,80.48 16.50))', 4326),
+    ST_SetSRID(ST_Point(80.520, 16.525), 4326)
 )
 ON CONFLICT (id) DO NOTHING;
 
