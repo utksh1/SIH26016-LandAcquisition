@@ -12,7 +12,7 @@
 ############################
 # Stage 1: builder
 ############################
-FROM rust:1.82-bookworm AS builder
+FROM rust:bookworm AS builder
 
 # Install build prerequisites. `pkg-config` and `libssl-dev` are required so
 # the `sqlx`/`native-tls` stack (workspace Cargo.toml) can link against
