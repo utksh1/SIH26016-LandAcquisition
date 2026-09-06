@@ -685,22 +685,230 @@ export function CategoryViews({
   }
 
   // =========================================================================
-  // CATEGORY 3: CADASTRAL LAND & PARCELS EXPLORER / GIS MAP
+  // CATEGORY 3A: CADASTRAL LAND PARCELS REGISTRY (PARCELS)
   // =========================================================================
-  if (activeCategory === 'parcels' || activeCategory === 'gis-map') {
+  if (activeCategory === 'parcels') {
     const activeParcel = cadastralParcels.find((p) => p.id === selectedParcelId) || cadastralParcels[0]
 
     return (
       <div className="category-panel-container">
         {renderCategoryHeader(
-          'Cadastral Land & Spatial GIS Explorer',
-          'Interactive GIS spatial boundary layer integrated with State DILRMP (Bhoomi / Bhulekh) and Unique Land Parcel Identification Number (ULPIN).',
-          'CADASTRAL GIS',
-          '#3d4f9f',
+          'Cadastral Land Parcels Registry',
+          'Authoritative statutory parcel schedule under Sections 11 & 19 of RFCTLARR Act 2013. Reconciled with State DILRMP (Bhoomi / Bhulekh) and Unique Land Parcel Identification Numbers (ULPIN).',
+          'PARCELS REGISTRY',
+          '#00684a',
           `${cadastralParcels.length} Parcels Synchronized`
         )}
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 18, alignItems: 'start' }}>
+        {/* Parcels Metric Row */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14, marginBottom: 20 }}>
+          <div style={{ background: '#fff', border: '1px solid #e1e5e8', borderRadius: 10, padding: 16 }}>
+            <span style={{ fontSize: 11, color: '#5c6c7a', textTransform: 'uppercase', fontFamily: 'DM Mono' }}>NOTIFIED AREA</span>
+            <strong style={{ display: 'block', fontSize: 20, color: '#001e2b', margin: '4px 0' }}>5.80 Hectares</strong>
+            <small style={{ color: '#00a35c', fontSize: 11 }}>100% Right-of-Way Surveyed</small>
+          </div>
+          <div style={{ background: '#fff', border: '1px solid #e1e5e8', borderRadius: 10, padding: 16 }}>
+            <span style={{ fontSize: 11, color: '#5c6c7a', textTransform: 'uppercase', fontFamily: 'DM Mono' }}>PARCEL DILRMP SYNC</span>
+            <strong style={{ display: 'block', fontSize: 20, color: '#00684a', margin: '4px 0' }}>3 Verified / 1 Scrutiny</strong>
+            <small style={{ color: '#5c6c7a', fontSize: 11 }}>Bhoomi & Webland Live Link</small>
+          </div>
+          <div style={{ background: '#fff', border: '1px solid #e1e5e8', borderRadius: 10, padding: 16 }}>
+            <span style={{ fontSize: 11, color: '#5c6c7a', textTransform: 'uppercase', fontFamily: 'DM Mono' }}>ASSESSED VALUATION</span>
+            <strong style={{ display: 'block', fontSize: 20, color: '#001e2b', margin: '4px 0' }}>₹4,80,82,500</strong>
+            <small style={{ color: '#5c6c7a', fontSize: 11 }}>Sec 26 Base Market Value</small>
+          </div>
+          <div style={{ background: '#fff', border: '1px solid #e1e5e8', borderRadius: 10, padding: 16 }}>
+            <span style={{ fontSize: 11, color: '#5c6c7a', textTransform: 'uppercase', fontFamily: 'DM Mono' }}>ULPIN SEEDING</span>
+            <strong style={{ display: 'block', fontSize: 20, color: '#00684a', margin: '4px 0' }}>14-Digit Standard</strong>
+            <small style={{ color: '#00a35c', fontSize: 11 }}>NIC Geo-referenced Standard</small>
+          </div>
+        </div>
+
+        {/* Tabular Registry */}
+        <div style={{ background: '#fff', border: '1px solid #e1e5e8', borderRadius: 12, padding: 20, marginBottom: 20 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
+            <div>
+              <strong style={{ fontSize: 16, color: '#001e2b' }}>Cadastral Parcel Ledger</strong>
+              <div style={{ fontSize: 12, color: '#5c6c7a' }}>Select any parcel to inspect Jamabandi record and title history</div>
+            </div>
+            <button
+              onClick={() => onSelectCategory('gis-map')}
+              style={{
+                background: '#3d4f9f',
+                color: '#fff',
+                border: 'none',
+                padding: '8px 16px',
+                borderRadius: 9999,
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              Open Spatial GIS Studio ➔
+            </button>
+          </div>
+
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
+              <thead>
+                <tr style={{ background: '#f4f7f6', borderBottom: '2px solid #e1e5e8', color: '#1c2d38' }}>
+                  <th style={{ padding: '12px 14px' }}>Survey No</th>
+                  <th style={{ padding: '12px 14px' }}>ULPIN</th>
+                  <th style={{ padding: '12px 14px' }}>Recorded Owner</th>
+                  <th style={{ padding: '12px 14px' }}>Area (Ha / Bigha)</th>
+                  <th style={{ padding: '12px 14px' }}>Land Class</th>
+                  <th style={{ padding: '12px 14px' }}>Assessed Rate</th>
+                  <th style={{ padding: '12px 14px' }}>DILRMP Status</th>
+                  <th style={{ padding: '12px 14px', textAlign: 'right' }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {cadastralParcels.map((p) => {
+                  const isSelected = p.id === activeParcel.id
+                  return (
+                    <tr
+                      key={p.id}
+                      onClick={() => setSelectedParcelId(p.id)}
+                      style={{
+                        borderBottom: '1px solid #eceff1',
+                        background: isSelected ? '#f0fdf4' : 'transparent',
+                        cursor: 'pointer',
+                        transition: 'background 0.15s',
+                      }}
+                    >
+                      <td style={{ padding: '12px 14px', fontWeight: 700, color: '#00684a', fontFamily: 'DM Mono' }}>
+                        {p.survey}
+                      </td>
+                      <td style={{ padding: '12px 14px', fontFamily: 'DM Mono', fontSize: 11, color: '#5c6c7a' }}>
+                        {p.ulpin}
+                      </td>
+                      <td style={{ padding: '12px 14px', fontWeight: 600, color: '#001e2b' }}>
+                        {p.owner}
+                      </td>
+                      <td style={{ padding: '12px 14px' }}>
+                        {p.areaHa} Ha <small style={{ color: '#5c6c7a' }}>({p.areaBigha} Bigha)</small>
+                      </td>
+                      <td style={{ padding: '12px 14px', color: '#3d4f5b' }}>
+                        {p.soil}
+                      </td>
+                      <td style={{ padding: '12px 14px', fontWeight: 600, color: '#001e2b' }}>
+                        {p.marketRate}
+                      </td>
+                      <td style={{ padding: '12px 14px' }}>
+                        <span
+                          style={{
+                            padding: '3px 8px',
+                            borderRadius: 4,
+                            fontSize: 11,
+                            fontWeight: 600,
+                            background: p.status === 'Verified' ? '#c3f0d2' : '#fff8e0',
+                            color: p.status === 'Verified' ? '#00684a' : '#946f3f',
+                          }}
+                        >
+                          ● {p.status}
+                        </span>
+                      </td>
+                      <td style={{ padding: '12px 14px', textAlign: 'right' }}>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setSelectedParcelId(p.id)
+                            onSelectCategory('gis-map')
+                          }}
+                          style={{
+                            background: '#f4f7f6',
+                            border: '1px solid #c1ccd6',
+                            borderRadius: 4,
+                            padding: '4px 10px',
+                            fontSize: 11,
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            color: '#001e2b',
+                          }}
+                        >
+                          View on Map ⌖
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Selected Parcel Dossier */}
+        <div style={{ background: '#fff', border: '1px solid #e1e5e8', borderRadius: 12, padding: 20 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
+            <div>
+              <span style={{ fontSize: 11, fontFamily: 'DM Mono', color: '#00684a', fontWeight: 700 }}>PARCEL DOSSIER</span>
+              <h3 style={{ margin: '2px 0 0', fontSize: 18, color: '#001e2b' }}>
+                Survey #{activeParcel.survey} · {activeParcel.owner}
+              </h3>
+            </div>
+            <button
+              onClick={() => {
+                setDilrmpSurvey(activeParcel.survey)
+                onSelectCategory('dilrmp')
+                onDilrmpLookup()
+              }}
+              style={{
+                background: '#00684a',
+                color: '#fff',
+                border: 'none',
+                borderRadius: 9999,
+                padding: '8px 18px',
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              Verify RoR against DILRMP ➔
+            </button>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14, fontSize: 13 }}>
+            <div style={{ background: '#f8faf9', padding: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}>
+              <span style={{ color: '#5c6c7a', fontSize: 11 }}>ULPIN Geometry:</span>
+              <strong style={{ display: 'block', color: '#001e2b', fontFamily: 'DM Mono' }}>{activeParcel.ulpin}</strong>
+            </div>
+            <div style={{ background: '#f8faf9', padding: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}>
+              <span style={{ color: '#5c6c7a', fontSize: 11 }}>DGPS Coordinates:</span>
+              <strong style={{ display: 'block', color: '#001e2b', fontFamily: 'DM Mono' }}>{activeParcel.coordinates}</strong>
+            </div>
+            <div style={{ background: '#f8faf9', padding: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}>
+              <span style={{ color: '#5c6c7a', fontSize: 11 }}>Gross Award & Solatium:</span>
+              <strong style={{ display: 'block', color: '#00684a' }}>{activeParcel.grossAward} (Solatium: {activeParcel.solatium})</strong>
+            </div>
+            <div style={{ background: '#f8faf9', padding: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}>
+              <span style={{ color: '#5c6c7a', fontSize: 11 }}>Encumbrance Status:</span>
+              <strong style={{ display: 'block', color: activeParcel.encumbrance.includes('Pending') ? '#dc2626' : '#00684a' }}>
+                {activeParcel.encumbrance}
+              </strong>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // =========================================================================
+  // CATEGORY 3B: SPATIAL GIS CADASTRAL MAP STUDIO (GIS-MAP)
+  // =========================================================================
+  if (activeCategory === 'gis-map') {
+    const activeParcel = cadastralParcels.find((p) => p.id === selectedParcelId) || cadastralParcels[0]
+
+    return (
+      <div className="category-panel-container">
+        {renderCategoryHeader(
+          'Spatial GIS Cadastral Map Studio',
+          'Interactive GIS spatial boundary layer with DGPS drone flight overlays, Right-of-Way (ROW) corridor buffer analysis, and EPSG:4326 coordinate inspection.',
+          'SPATIAL GIS STUDIO',
+          '#3d4f9f',
+          `${cadastralParcels.length} Spatial Polygons Active`
+        )}
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: 18, alignItems: 'start' }}>
           {/* Left Column: Spatial GIS Map Canvas */}
           <div style={{ background: '#ffffff', border: '1px solid #e1e5e8', borderRadius: 12, padding: 20 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
@@ -719,7 +927,7 @@ export function CategoryViews({
             <div
               style={{
                 width: '100%',
-                height: 360,
+                height: 380,
                 background: '#0d281e',
                 borderRadius: 8,
                 position: 'relative',
@@ -751,154 +959,97 @@ export function CategoryViews({
                   fill="none"
                   stroke="#f59e0b"
                   strokeWidth="3"
-                  strokeDasharray="6,4"
+                  strokeDasharray="6 4"
                 />
 
-                {/* Parcel 1042 */}
+                {/* Cadastral Polygon 1: 1042 */}
                 <polygon
-                  points="60,120 170,90 190,170 80,200"
-                  fill={selectedParcelId === 'PARCEL-1042' ? 'rgba(0, 237, 100, 0.4)' : 'rgba(0, 237, 100, 0.15)'}
-                  stroke="#00ed64"
-                  strokeWidth={selectedParcelId === 'PARCEL-1042' ? '3' : '1.5'}
-                  style={{ cursor: 'pointer' }}
+                  points="60,110 160,100 150,170 50,165"
+                  fill={selectedParcelId === 'PARCEL-1042' ? 'rgba(0,237,100,0.45)' : 'rgba(0,181,69,0.25)'}
+                  stroke={selectedParcelId === 'PARCEL-1042' ? '#00ed64' : '#00b545'}
+                  strokeWidth={selectedParcelId === 'PARCEL-1042' ? 3 : 1.5}
+                  style={{ cursor: 'pointer', transition: 'all 0.2s' }}
                   onClick={() => setSelectedParcelId('PARCEL-1042')}
                 />
-                <text x="110" y="150" fill="#ffffff" fontSize="11" fontFamily="DM Mono" fontWeight="bold">
-                  #1042 (1.25 ha)
+                <text x="80" y="142" fill="#eaf1e8" fontSize="10" fontFamily="DM Mono" fontWeight="700">
+                  #1042
                 </text>
 
-                {/* Parcel 1043 */}
+                {/* Cadastral Polygon 2: 1043 */}
                 <polygon
-                  points="180,88 310,70 330,150 200,168"
-                  fill={selectedParcelId === 'PARCEL-1043' ? 'rgba(250, 110, 57, 0.4)' : 'rgba(250, 110, 57, 0.18)'}
-                  stroke="#fa6e39"
-                  strokeWidth={selectedParcelId === 'PARCEL-1043' ? '3' : '1.5'}
-                  style={{ cursor: 'pointer' }}
+                  points="160,100 270,85 260,150 150,170"
+                  fill={selectedParcelId === 'PARCEL-1043' ? 'rgba(250,110,57,0.5)' : 'rgba(250,110,57,0.25)'}
+                  stroke={selectedParcelId === 'PARCEL-1043' ? '#fa6e39' : '#d97706'}
+                  strokeWidth={selectedParcelId === 'PARCEL-1043' ? 3 : 1.5}
+                  style={{ cursor: 'pointer', transition: 'all 0.2s' }}
                   onClick={() => setSelectedParcelId('PARCEL-1043')}
                 />
-                <text x="230" y="120" fill="#ffffff" fontSize="11" fontFamily="DM Mono" fontWeight="bold">
-                  #1043 (2.10 ha)
+                <text x="185" y="130" fill="#eaf1e8" fontSize="10" fontFamily="DM Mono" fontWeight="700">
+                  #1043 (Dispute)
                 </text>
 
-                {/* Parcel 1044 */}
+                {/* Cadastral Polygon 3: 1044 */}
                 <polygon
-                  points="320,68 440,80 450,160 340,148"
-                  fill={selectedParcelId === 'PARCEL-1044' ? 'rgba(123, 63, 242, 0.4)' : 'rgba(123, 63, 242, 0.18)'}
-                  stroke="#7b3ff2"
-                  strokeWidth={selectedParcelId === 'PARCEL-1044' ? '3' : '1.5'}
-                  style={{ cursor: 'pointer' }}
+                  points="270,85 380,105 370,180 260,150"
+                  fill={selectedParcelId === 'PARCEL-1044' ? 'rgba(0,237,100,0.45)' : 'rgba(0,181,69,0.25)'}
+                  stroke={selectedParcelId === 'PARCEL-1044' ? '#00ed64' : '#00b545'}
+                  strokeWidth={selectedParcelId === 'PARCEL-1044' ? 3 : 1.5}
+                  style={{ cursor: 'pointer', transition: 'all 0.2s' }}
                   onClick={() => setSelectedParcelId('PARCEL-1044')}
                 />
-                <text x="360" y="120" fill="#ffffff" fontSize="11" fontFamily="DM Mono" fontWeight="bold">
-                  #1044 (0.85 ha)
+                <text x="295" y="140" fill="#eaf1e8" fontSize="10" fontFamily="DM Mono" fontWeight="700">
+                  #1044
+                </text>
+
+                {/* Cadastral Polygon 4: 1045 */}
+                <polygon
+                  points="380,105 460,130 450,220 370,180"
+                  fill={selectedParcelId === 'PARCEL-1045' ? 'rgba(0,237,100,0.45)' : 'rgba(0,181,69,0.25)'}
+                  stroke={selectedParcelId === 'PARCEL-1045' ? '#00ed64' : '#00b545'}
+                  strokeWidth={selectedParcelId === 'PARCEL-1045' ? 3 : 1.5}
+                  style={{ cursor: 'pointer', transition: 'all 0.2s' }}
+                  onClick={() => setSelectedParcelId('PARCEL-1045')}
+                />
+                <text x="395" y="165" fill="#eaf1e8" fontSize="10" fontFamily="DM Mono" fontWeight="700">
+                  #1045
                 </text>
               </svg>
-
-              <div style={{ position: 'absolute', bottom: 12, left: 14, background: 'rgba(0,30,43,0.85)', padding: '6px 12px', borderRadius: 6, fontSize: 11, color: '#c1ccd6' }}>
-                Click a parcel polygon to inspect ownership & valuation
-              </div>
-            </div>
-
-            {/* Parcel Selection List */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginTop: 14 }}>
-              {cadastralParcels.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => setSelectedParcelId(p.id)}
-                  style={{
-                    background: selectedParcelId === p.id ? '#001e2b' : '#f4f7f6',
-                    color: selectedParcelId === p.id ? '#00ed64' : '#1c2d38',
-                    border: '1px solid ' + (selectedParcelId === p.id ? '#001e2b' : '#e1e5e8'),
-                    padding: '8px 10px',
-                    borderRadius: 8,
-                    fontSize: 11,
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    textAlign: 'left',
-                  }}
-                >
-                  <div style={{ fontFamily: 'DM Mono' }}>{p.survey}</div>
-                  <div style={{ fontSize: 10, color: selectedParcelId === p.id ? '#a7f3d0' : '#5c6c7a' }}>{p.areaHa} ha</div>
-                </button>
-              ))}
             </div>
           </div>
 
-          {/* Right Column: Parcel Detail Inspector Card */}
+          {/* Right Column: Spatial Attributes Inspector */}
           <div style={{ background: '#ffffff', border: '1px solid #e1e5e8', borderRadius: 12, padding: 20 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <span style={{ font: '700 11px "DM Mono"', color: '#00684a', letterSpacing: '0.05em' }}>
-                PARCEL RECORD INSPECTOR
-              </span>
-              <span
-                style={{
-                  background: activeParcel.status === 'Verified' ? '#c3f0d2' : '#fff8e0',
-                  color: activeParcel.status === 'Verified' ? '#00684a' : '#946f3f',
-                  fontSize: 11,
-                  fontWeight: 700,
-                  padding: '2px 8px',
-                  borderRadius: 4,
-                }}
-              >
-                ● {activeParcel.status}
+              <strong style={{ fontSize: 14, color: '#001e2b' }}>Spatial Attribute Inspector</strong>
+              <span style={{ fontSize: 11, color: '#3d4f9f', fontWeight: 700, fontFamily: 'DM Mono' }}>
+                {activeParcel.coordinates}
               </span>
             </div>
 
-            <h3 style={{ margin: '0 0 2px', fontSize: 20, color: '#001e2b' }}>
-              Survey #{activeParcel.survey}
-            </h3>
-            <div style={{ font: '11px "DM Mono"', color: '#5c6c7a', marginBottom: 14 }}>
-              ULPIN: <strong>{activeParcel.ulpin}</strong>
-            </div>
-
-            <div style={{ display: 'grid', gap: 10, fontSize: 13, borderTop: '1px solid #eceff1', paddingTop: 12 }}>
-              <div>
-                <span style={{ color: '#5c6c7a', fontSize: 12 }}>Recorded Owner:</span>
+            <div style={{ display: 'grid', gap: 10, fontSize: 13 }}>
+              <div style={{ background: '#f8faf9', padding: 10, borderRadius: 6, border: '1px solid #e2e8f0' }}>
+                <span style={{ color: '#5c6c7a', fontSize: 11 }}>Selected Parcel:</span>
+                <strong style={{ display: 'block', fontSize: 15, color: '#001e2b' }}>Survey #{activeParcel.survey}</strong>
+                <small style={{ color: '#5c6c7a', fontFamily: 'DM Mono' }}>ULPIN: {activeParcel.ulpin}</small>
+              </div>
+              <div style={{ background: '#f8faf9', padding: 10, borderRadius: 6, border: '1px solid #e2e8f0' }}>
+                <span style={{ color: '#5c6c7a', fontSize: 11 }}>Landowner & Soil:</span>
                 <div style={{ fontWeight: 600, color: '#001e2b' }}>{activeParcel.owner}</div>
+                <div style={{ color: '#5c6c7a', fontSize: 12 }}>{activeParcel.soil}</div>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                <div>
-                  <span style={{ color: '#5c6c7a', fontSize: 12 }}>Land Area:</span>
-                  <div style={{ fontWeight: 600 }}>{activeParcel.areaHa} ha ({activeParcel.areaBigha} Bigha)</div>
-                </div>
-                <div>
-                  <span style={{ color: '#5c6c7a', fontSize: 12 }}>Soil Classification:</span>
-                  <div style={{ fontWeight: 600 }}>{activeParcel.soil}</div>
-                </div>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                <div>
-                  <span style={{ color: '#5c6c7a', fontSize: 12 }}>Assessed Market Value:</span>
-                  <div style={{ fontWeight: 600, color: '#001e2b' }}>{activeParcel.grossAward}</div>
-                </div>
-                <div>
-                  <span style={{ color: '#5c6c7a', fontSize: 12 }}>100% Solatium (Sec 30):</span>
-                  <div style={{ fontWeight: 600, color: '#00684a' }}>{activeParcel.solatium}</div>
-                </div>
-              </div>
-              <div>
-                <span style={{ color: '#5c6c7a', fontSize: 12 }}>PFMS DBT Status:</span>
-                <div style={{ fontWeight: 600, color: activeParcel.dbtStatus === 'Disbursed' ? '#00b545' : '#d97706' }}>
-                  {activeParcel.dbtStatus} ({activeParcel.utr})
-                </div>
-              </div>
-              <div>
-                <span style={{ color: '#5c6c7a', fontSize: 12 }}>Title Encumbrances / Court Orders:</span>
-                <div style={{ fontWeight: 600, color: activeParcel.encumbrance.includes('Pending') ? '#dc2626' : '#00684a' }}>
-                  {activeParcel.encumbrance}
+              <div style={{ background: '#f8faf9', padding: 10, borderRadius: 6, border: '1px solid #e2e8f0' }}>
+                <span style={{ color: '#5c6c7a', fontSize: 11 }}>Area & Market Value:</span>
+                <div style={{ fontWeight: 600, color: '#00684a' }}>
+                  {activeParcel.areaHa} Ha ({activeParcel.areaBigha} Bigha) · {activeParcel.marketRate}
                 </div>
               </div>
             </div>
 
-            <div style={{ marginTop: 16, display: 'flex', gap: 10 }}>
+            <div style={{ marginTop: 16 }}>
               <button
-                onClick={() => {
-                  setDilrmpSurvey(activeParcel.survey)
-                  onSelectCategory('dilrmp')
-                  onDilrmpLookup()
-                }}
+                onClick={() => onSelectCategory('parcels')}
                 style={{
-                  flex: 1,
+                  width: '100%',
                   background: '#001e2b',
                   color: '#ffffff',
                   border: 'none',
@@ -909,7 +1060,7 @@ export function CategoryViews({
                   cursor: 'pointer',
                 }}
               >
-                Sync with State DILRMP ➔
+                Open Full Parcels Registry ➔
               </button>
             </div>
           </div>
@@ -1139,13 +1290,180 @@ export function CategoryViews({
   }
 
   // =========================================================================
-  // CATEGORY 6: STATUTORY COMPENSATION AWARD & SOLATIUM ENGINE (SEC 21-30)
+  // CATEGORY 6A: SECTION 23/30 STATUTORY AWARD DECREES REGISTRY (AWARDS)
   // =========================================================================
-  if (activeCategory === 'awards' || activeCategory === 'compensation') {
+  if (activeCategory === 'awards') {
+    const awardDecrees = [
+      {
+        id: 'AWD-2026-001',
+        survey: 'BH-48-1042',
+        awardee: 'Asha Devi w/o Ram Lal',
+        area: '1.25 Ha',
+        baseVal: '₹52,50,000',
+        solatium: '₹52,50,000',
+        interest: '₹13,12,500',
+        totalAward: '₹1,18,12,500',
+        status: 'Signed & Gazetted',
+        gazetteDate: '2026-08-24',
+        dsc: 'DSC-CALA-KRN-SEC23-VALID',
+      },
+      {
+        id: 'AWD-2026-002',
+        survey: 'BH-48-1043',
+        awardee: 'Manoj Kumar Sharma & Brothers',
+        area: '2.10 Ha',
+        baseVal: '₹71,40,000',
+        solatium: '₹71,40,000',
+        interest: '₹17,85,000',
+        totalAward: '₹1,60,65,000',
+        status: 'Under Reference (Sec 64)',
+        gazetteDate: '2026-08-28',
+        dsc: 'DSC-CALA-KRN-SEC23-VALID',
+      },
+      {
+        id: 'AWD-2026-003',
+        survey: 'BH-48-1044',
+        awardee: 'Gram Panchayat Common Pasture',
+        area: '0.85 Ha',
+        baseVal: '₹23,80,000',
+        solatium: '₹23,80,000',
+        interest: '₹5,95,000',
+        totalAward: '₹53,55,000',
+        status: 'Authority Deposit (Sec 77)',
+        gazetteDate: '2026-09-01',
+        dsc: 'DSC-CALA-KRN-SEC23-VALID',
+      },
+      {
+        id: 'AWD-2026-004',
+        survey: 'BH-48-1045',
+        awardee: 'Sukhvinder Singh s/o Gurdial Singh',
+        area: '1.65 Ha',
+        baseVal: '₹66,00,000',
+        solatium: '₹66,00,000',
+        interest: '₹16,50,000',
+        totalAward: '₹1,48,50,000',
+        status: 'Signed & Gazetted',
+        gazetteDate: '2026-09-03',
+        dsc: 'DSC-CALA-KRN-SEC23-VALID',
+      },
+    ]
+
     return (
       <div className="category-panel-container">
         {renderCategoryHeader(
-          'Compensation Award & Solatium Engine',
+          'Section 23 & 30 Statutory Award Decrees Registry',
+          'Formal civil decree rolls of compensation awards pronounced by CALA under Sections 23, 30(2) (100% Solatium), and 30(3) (12% Interest) of RFCTLARR Act 2013.',
+          'AWARD DECREES',
+          '#7b3ff2',
+          '4 Civil Decrees Gazetted'
+        )}
+
+        {/* Awards Metric Row */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14, marginBottom: 20 }}>
+          <div style={{ background: '#fff', border: '1px solid #e1e5e8', borderRadius: 10, padding: 16 }}>
+            <span style={{ fontSize: 11, color: '#5c6c7a', textTransform: 'uppercase', fontFamily: 'DM Mono' }}>TOTAL AWARD ROLL</span>
+            <strong style={{ display: 'block', fontSize: 20, color: '#001e2b', margin: '4px 0' }}>₹4,80,82,500</strong>
+            <small style={{ color: '#00a35c', fontSize: 11 }}>Civil Decrees Enforced</small>
+          </div>
+          <div style={{ background: '#fff', border: '1px solid #e1e5e8', borderRadius: 10, padding: 16 }}>
+            <span style={{ fontSize: 11, color: '#5c6c7a', textTransform: 'uppercase', fontFamily: 'DM Mono' }}>100% SOLATIUM (SEC 30(2))</span>
+            <strong style={{ display: 'block', fontSize: 20, color: '#00684a', margin: '4px 0' }}>₹2,13,70,000</strong>
+            <small style={{ color: '#5c6c7a', fontSize: 11 }}>Mandatory First Schedule</small>
+          </div>
+          <div style={{ background: '#fff', border: '1px solid #e1e5e8', borderRadius: 10, padding: 16 }}>
+            <span style={{ fontSize: 11, color: '#5c6c7a', textTransform: 'uppercase', fontFamily: 'DM Mono' }}>12% INTEREST (SEC 30(3))</span>
+            <strong style={{ display: 'block', fontSize: 20, color: '#7b3ff2', margin: '4px 0' }}>₹53,42,500</strong>
+            <small style={{ color: '#5c6c7a', fontSize: 11 }}>Accrued from Sec 11 Notice</small>
+          </div>
+          <div style={{ background: '#fff', border: '1px solid #e1e5e8', borderRadius: 10, padding: 16 }}>
+            <span style={{ fontSize: 11, color: '#5c6c7a', textTransform: 'uppercase', fontFamily: 'DM Mono' }}>DSC DIGITAL SIGNATURES</span>
+            <strong style={{ display: 'block', fontSize: 20, color: '#00684a', margin: '4px 0' }}>100% Validated</strong>
+            <small style={{ color: '#00a35c', fontSize: 11 }}>e-Sign Act 2000 Sealed</small>
+          </div>
+        </div>
+
+        {/* Awards Decrees Table */}
+        <div style={{ background: '#fff', border: '1px solid #e1e5e8', borderRadius: 12, padding: 20, marginBottom: 20 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
+            <div>
+              <strong style={{ fontSize: 16, color: '#001e2b' }}>Gazetted Section 23/30 Award Roll</strong>
+              <div style={{ fontSize: 12, color: '#5c6c7a' }}>Form No. 14 Award Determinations published in Official Gazette</div>
+            </div>
+            <button
+              onClick={() => onSelectCategory('compensation')}
+              style={{
+                background: '#00b545',
+                color: '#fff',
+                border: 'none',
+                padding: '8px 16px',
+                borderRadius: 9999,
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              Open Valuation Calculator ➔
+            </button>
+          </div>
+
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
+              <thead>
+                <tr style={{ background: '#f4f7f6', borderBottom: '2px solid #e1e5e8', color: '#1c2d38' }}>
+                  <th style={{ padding: '12px 14px' }}>Decree ID</th>
+                  <th style={{ padding: '12px 14px' }}>Survey No</th>
+                  <th style={{ padding: '12px 14px' }}>Awardee Name</th>
+                  <th style={{ padding: '12px 14px' }}>Base Value (Sec 26)</th>
+                  <th style={{ padding: '12px 14px' }}>100% Solatium</th>
+                  <th style={{ padding: '12px 14px' }}>12% Interest</th>
+                  <th style={{ padding: '12px 14px' }}>Total Award Decree</th>
+                  <th style={{ padding: '12px 14px' }}>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {awardDecrees.map((a) => (
+                  <tr key={a.id} style={{ borderBottom: '1px solid #eceff1' }}>
+                    <td style={{ padding: '12px 14px', fontWeight: 700, color: '#7b3ff2', fontFamily: 'DM Mono' }}>
+                      {a.id}
+                    </td>
+                    <td style={{ padding: '12px 14px', fontFamily: 'DM Mono', fontWeight: 600 }}>{a.survey}</td>
+                    <td style={{ padding: '12px 14px', fontWeight: 600, color: '#001e2b' }}>{a.awardee}</td>
+                    <td style={{ padding: '12px 14px' }}>{a.baseVal}</td>
+                    <td style={{ padding: '12px 14px', color: '#00684a', fontWeight: 600 }}>{a.solatium}</td>
+                    <td style={{ padding: '12px 14px', color: '#7b3ff2' }}>{a.interest}</td>
+                    <td style={{ padding: '12px 14px', fontWeight: 700, color: '#001e2b' }}>{a.totalAward}</td>
+                    <td style={{ padding: '12px 14px' }}>
+                      <span
+                        style={{
+                          padding: '3px 8px',
+                          borderRadius: 4,
+                          fontSize: 11,
+                          fontWeight: 600,
+                          background: a.status.includes('Signed') ? '#c3f0d2' : '#fff8e0',
+                          color: a.status.includes('Signed') ? '#00684a' : '#946f3f',
+                        }}
+                      >
+                        ● {a.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // =========================================================================
+  // CATEGORY 6B: FIRST SCHEDULE VALUATION ENGINE & CALCULATOR (COMPENSATION)
+  // =========================================================================
+  if (activeCategory === 'compensation') {
+    return (
+      <div className="category-panel-container">
+        {renderCategoryHeader(
+          'First Schedule Statutory Valuation Engine',
           'First Schedule statutory compensation computation per Sections 26 (Market Value), 29 (Assets & Trees Valuation), 30(2) (100% Solatium), and 30(3) (12% p.a. Additional Interest).',
           'COMPENSATION ENGINE',
           '#00b545',
@@ -1460,64 +1778,550 @@ export function CategoryViews({
   }
 
   // =========================================================================
-  // CATEGORY 9: CITIZEN VIEWS (MY LAND, NOTICES, COMPENSATION, PAYMENTS)
+  // CITIZEN CATEGORY 1: MY LAND HOLDINGS (MY-LAND)
   // =========================================================================
-  if (['my-land', 'my-notices', 'my-compensation', 'my-payments', 'grievances', 'my-objections'].includes(activeCategory)) {
+  if (activeCategory === 'my-land') {
     return (
       <div className="category-panel-container">
         {renderCategoryHeader(
-          'Citizen Landowner Transparency Portal',
-          'Self-service transparency desk for affected landholders under RFCTLARR Act 2013: Inspect survey records, download gazette notices, track compensation, and monitor PFMS bank disbursements.',
-          'CITIZEN PORTAL',
-          '#00ed64',
+          'My Registered Land Holdings & Cadastral Records',
+          'Verified land parcels registered under your Aadhaar / RoR Jamabandi. Shows survey numbers, khasra dimensions, acquisition status, and DILRMP state database synchronization.',
+          'LAND HOLDINGS',
+          '#00a35c',
           'Landowner: Asha Devi (Survey #1042)'
         )}
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
-          {/* Card 1: My Land Record */}
-          <div style={{ background: '#ffffff', border: '1px solid #e1e5e8', borderRadius: 12, padding: 20 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-              <strong style={{ fontSize: 15, color: '#001e2b' }}>My Land Holding</strong>
-              <span style={{ fontSize: 11, background: '#c3f0d2', color: '#00684a', padding: '2px 8px', borderRadius: 4, fontWeight: 700 }}>
-                DILRMP Verified
+        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 18 }}>
+          {/* Detailed Land Record */}
+          <div style={{ background: '#ffffff', border: '1px solid #e1e5e8', borderRadius: 12, padding: 22 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div>
+                <span style={{ fontSize: 11, fontFamily: 'DM Mono', color: '#00684a', fontWeight: 700 }}>VERIFIED ROR RECORD</span>
+                <h3 style={{ margin: '2px 0 0', fontSize: 18, color: '#001e2b' }}>
+                  Survey #BH-48-1042 / 1A
+                </h3>
+              </div>
+              <span style={{ background: '#c3f0d2', color: '#00684a', padding: '4px 10px', borderRadius: 4, fontWeight: 700, fontSize: 12 }}>
+                ✓ DILRMP Verified
               </span>
             </div>
-            <div style={{ fontSize: 13, color: '#1c2d38', display: 'grid', gap: 6 }}>
-              <div><strong>Survey / Khasra:</strong> BH-48-1042</div>
-              <div><strong>ULPIN:</strong> 14081042-2026-RAJ</div>
-              <div><strong>Acquired Area:</strong> 1.25 Hectares (100% of plot)</div>
-              <div><strong>RoR Jamabandi:</strong> Khewat #14 / Khatauni #82</div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, fontSize: 13, marginBottom: 18 }}>
+              <div style={{ background: '#f8faf9', padding: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                <span style={{ color: '#5c6c7a', fontSize: 11 }}>Unique Parcel ID (ULPIN):</span>
+                <strong style={{ display: 'block', color: '#001e2b', fontFamily: 'DM Mono' }}>14081042-2026-RAJ</strong>
+              </div>
+              <div style={{ background: '#f8faf9', padding: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                <span style={{ color: '#5c6c7a', fontSize: 11 }}>RoR Jamabandi:</span>
+                <strong style={{ display: 'block', color: '#001e2b' }}>Khewat #14 / Khatauni #82</strong>
+              </div>
+              <div style={{ background: '#f8faf9', padding: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                <span style={{ color: '#5c6c7a', fontSize: 11 }}>Acquired Parcel Area:</span>
+                <strong style={{ display: 'block', color: '#00684a' }}>1.25 Hectares (4.88 Bigha)</strong>
+              </div>
+              <div style={{ background: '#f8faf9', padding: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                <span style={{ color: '#5c6c7a', fontSize: 11 }}>Land Classification:</span>
+                <strong style={{ display: 'block', color: '#001e2b' }}>Chahi-1 (Double Cropped)</strong>
+              </div>
+            </div>
+
+            <div style={{ borderTop: '1px solid #eceff1', paddingTop: 14, display: 'flex', gap: 10 }}>
+              <button
+                onClick={() => showToast('Jamabandi RoR extract downloaded in Hindi & English (PDF)')}
+                style={{
+                  background: '#00684a',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: 9999,
+                  padding: '10px 18px',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Download RoR Jamabandi Certificate (PDF) ⬇
+              </button>
             </div>
           </div>
 
-          {/* Card 2: Compensation Breakdown */}
-          <div style={{ background: '#ffffff', border: '1px solid #e1e5e8', borderRadius: 12, padding: 20 }}>
-            <strong style={{ fontSize: 15, color: '#001e2b', display: 'block', marginBottom: 10 }}>
-              My Compensation Award
-            </strong>
-            <div style={{ fontSize: 13, color: '#1c2d38', display: 'grid', gap: 6 }}>
-              <div><strong>Base Land Value:</strong> ₹52,50,000</div>
-              <div><strong>100% Solatium (Sec 30):</strong> ₹52,50,000</div>
-              <div><strong>12% Interest (Sec 30(3)):</strong> ₹13,12,500</div>
-              <div style={{ borderTop: '1px solid #eceff1', paddingTop: 6, fontWeight: 700, color: '#00684a' }}>
-                Total Award: ₹1,18,12,500
+          {/* Boundaries and Neighbors */}
+          <div style={{ background: '#ffffff', border: '1px solid #e1e5e8', borderRadius: 12, padding: 22 }}>
+            <h3 style={{ margin: '0 0 14px', fontSize: 16, color: '#001e2b' }}>Cadastral Boundary Four-Corners</h3>
+            <div style={{ display: 'grid', gap: 10, fontSize: 13 }}>
+              <div style={{ padding: 10, background: '#f4f7f6', borderRadius: 6 }}>
+                <strong>North:</strong> Khasra #1041 (Village Canal / Distributary)
+              </div>
+              <div style={{ padding: 10, background: '#f4f7f6', borderRadius: 6 }}>
+                <strong>South:</strong> Khasra #1043 (Manoj Kumar Sharma & Brothers)
+              </div>
+              <div style={{ padding: 10, background: '#f4f7f6', borderRadius: 6 }}>
+                <strong>East:</strong> Pipeline Right-of-Way Corridor Boundary
+              </div>
+              <div style={{ padding: 10, background: '#f4f7f6', borderRadius: 6 }}>
+                <strong>West:</strong> Gram Panchayat Village Road (12m Paved)
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // =========================================================================
+  // CITIZEN CATEGORY 2: STATUTORY NOTICES & GAZETTES (MY-NOTICES)
+  // =========================================================================
+  if (activeCategory === 'my-notices') {
+    const citizenNotices = [
+      {
+        id: 'NOT-2026-01',
+        section: 'Section 11(1)',
+        title: 'Preliminary Notification & Land Use Freeze Order',
+        date: '2026-04-12',
+        gazette: 'Gazette of India Ext. No. 418/2026',
+        servedVia: 'Registered Post with A/D (Delivered)',
+      },
+      {
+        id: 'NOT-2026-02',
+        section: 'Section 15(2)',
+        title: 'Notice for Hearing of Objections Before CALA',
+        date: '2026-06-18',
+        gazette: 'Collectorate Notice Board No. LA/2026/89',
+        servedVia: 'Hand Delivered by Village Talathi (Signed)',
+      },
+      {
+        id: 'NOT-2026-03',
+        section: 'Section 19(1)',
+        title: 'Declaration of Acquisition for Public Purpose',
+        date: '2026-07-29',
+        gazette: 'Gazette of India Ext. No. 712/2026',
+        servedVia: 'Panchayat Chaupal Publication',
+      },
+      {
+        id: 'NOT-2026-04',
+        section: 'Section 21',
+        title: 'Public Notice of Claims to Compensation and Possession',
+        date: '2026-08-15',
+        gazette: 'Form No. 9 Public Notice',
+        servedVia: 'Speed Post (Article #EK88291024IN)',
+      },
+    ]
+
+    return (
+      <div className="category-panel-container">
+        {renderCategoryHeader(
+          'Statutory Gazette Notices & Summons',
+          'Official notifications and legal summons served under RFCTLARR Act 2013 regarding Survey #1042, including preliminary notifications, declaration copies, and award enquiry notices.',
+          'STATUTORY NOTICES',
+          '#fa6e39',
+          `${citizenNotices.length} Notices Served`
+        )}
+
+        <div style={{ background: '#ffffff', border: '1px solid #e1e5e8', borderRadius: 12, padding: 20 }}>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
+              <thead>
+                <tr style={{ background: '#f4f7f6', borderBottom: '2px solid #e1e5e8', color: '#1c2d38' }}>
+                  <th style={{ padding: '12px 14px' }}>Notice ID</th>
+                  <th style={{ padding: '12px 14px' }}>Statutory Section</th>
+                  <th style={{ padding: '12px 14px' }}>Subject / Purpose</th>
+                  <th style={{ padding: '12px 14px' }}>Publication Date</th>
+                  <th style={{ padding: '12px 14px' }}>Service Mode</th>
+                  <th style={{ padding: '12px 14px', textAlign: 'right' }}>Official Copy</th>
+                </tr>
+              </thead>
+              <tbody>
+                {citizenNotices.map((n) => (
+                  <tr key={n.id} style={{ borderBottom: '1px solid #eceff1' }}>
+                    <td style={{ padding: '12px 14px', fontFamily: 'DM Mono', fontWeight: 700, color: '#fa6e39' }}>{n.id}</td>
+                    <td style={{ padding: '12px 14px' }}>
+                      <span style={{ background: '#fef3c7', color: '#92400e', padding: '2px 8px', borderRadius: 4, fontWeight: 700, fontSize: 11 }}>
+                        {n.section}
+                      </span>
+                    </td>
+                    <td style={{ padding: '12px 14px' }}>
+                      <strong style={{ color: '#001e2b' }}>{n.title}</strong>
+                      <div style={{ fontSize: 11, color: '#5c6c7a' }}>{n.gazette}</div>
+                    </td>
+                    <td style={{ padding: '12px 14px', fontFamily: 'DM Mono' }}>{n.date}</td>
+                    <td style={{ padding: '12px 14px', color: '#00684a', fontWeight: 600 }}>{n.servedVia}</td>
+                    <td style={{ padding: '12px 14px', textAlign: 'right' }}>
+                      <button
+                        onClick={() => showToast(`Downloaded certified copy: ${n.title}`)}
+                        style={{
+                          background: '#f4f7f6',
+                          border: '1px solid #c1ccd6',
+                          borderRadius: 4,
+                          padding: '4px 10px',
+                          fontSize: 11,
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Download PDF ⬇
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // =========================================================================
+  // CITIZEN CATEGORY 3: CITIZEN OBJECTIONS (MY-OBJECTIONS)
+  // =========================================================================
+  if (activeCategory === 'my-objections') {
+    return (
+      <div className="category-panel-container">
+        {renderCategoryHeader(
+          'Section 15 Citizen Objections & Hearing Docket',
+          'Track personal hearing appointments before the Competent Authority (CALA), review speaking orders, and file supplementary evidentiary proof regarding Survey #1042.',
+          'CITIZEN OBJECTIONS',
+          '#fa6e39',
+          'Docket #OBJ-2026-SEC15-084'
+        )}
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 18 }}>
+          {/* Active Objection Status */}
+          <div style={{ background: '#ffffff', border: '1px solid #e1e5e8', borderRadius: 12, padding: 22 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+              <strong style={{ fontSize: 16, color: '#001e2b' }}>Active Hearing Case Docket</strong>
+              <span style={{ background: '#fff8e0', color: '#946f3f', padding: '4px 10px', borderRadius: 4, fontWeight: 700, fontSize: 12 }}>
+                Hearing Scheduled
+              </span>
+            </div>
+
+            <div style={{ display: 'grid', gap: 12, fontSize: 13 }}>
+              <div>
+                <span style={{ color: '#5c6c7a', fontSize: 11 }}>Docket Number:</span>
+                <div style={{ fontFamily: 'DM Mono', fontWeight: 700, color: '#001e2b' }}>OBJ-2026-SEC15-084</div>
+              </div>
+              <div>
+                <span style={{ color: '#5c6c7a', fontSize: 11 }}>Grounds of Objection:</span>
+                <div style={{ fontWeight: 600, color: '#b91c1c' }}>
+                  Valuation Dispute — High-yield mango orchard and borewell under-assessed in PWD valuation schedule
+                </div>
+              </div>
+              <div>
+                <span style={{ color: '#5c6c7a', fontSize: 11 }}>Hearing Date & Location:</span>
+                <div style={{ fontWeight: 600, color: '#00684a' }}>
+                  18 Sep 2026, 11:30 AM · Court Hall No. 2, District Collectorate, Kurnool
+                </div>
+              </div>
+              <div>
+                <span style={{ color: '#5c6c7a', fontSize: 11 }}>Presiding Authority:</span>
+                <div style={{ color: '#001e2b' }}>District Collector & CALA / Joint Collector (Revenue)</div>
               </div>
             </div>
           </div>
 
-          {/* Card 3: Bank Direct Credit (DBT) */}
-          <div style={{ background: '#ffffff', border: '1px solid #e1e5e8', borderRadius: 12, padding: 20 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-              <strong style={{ fontSize: 15, color: '#001e2b' }}>PFMS Direct Bank Credit</strong>
-              <span style={{ fontSize: 11, background: '#c3f0d2', color: '#00684a', padding: '2px 8px', borderRadius: 4, fontWeight: 700 }}>
-                CREDITED ✓
+          {/* Supplementary Evidence Upload Form */}
+          <div style={{ background: '#ffffff', border: '1px solid #e1e5e8', borderRadius: 12, padding: 22 }}>
+            <h3 style={{ margin: '0 0 12px', fontSize: 16, color: '#001e2b' }}>Submit Supplementary Documents</h3>
+            <div style={{ display: 'grid', gap: 10 }}>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: '#1c2d38' }}>Document Type</label>
+                <select style={{ width: '100%', height: 36, padding: '0 8px', borderRadius: 6, border: '1px solid #c1ccd6', marginTop: 4 }}>
+                  <option>Registered Sale Deed of Adjoining Barani Land (2025-26)</option>
+                  <option>Horticulture Officer Valuation Certificate for Fruit Trees</option>
+                  <option>Groundwater Department Borewell Registration & Log</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: '#1c2d38' }}>Document Description / Remarks</label>
+                <textarea
+                  rows={3}
+                  placeholder="Provide details of sale deed or crop valuation..."
+                  style={{ width: '100%', padding: 8, borderRadius: 6, border: '1px solid #c1ccd6', marginTop: 4 }}
+                />
+              </div>
+              <button
+                onClick={() => showToast('Document successfully submitted and appended to Objection Case Docket!')}
+                style={{
+                  background: '#fa6e39',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: 9999,
+                  padding: '10px 0',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  marginTop: 6,
+                }}
+              >
+                Upload Supplementary Evidence ➔
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // =========================================================================
+  // CITIZEN CATEGORY 4: MY COMPENSATION AWARD (MY-COMPENSATION)
+  // =========================================================================
+  if (activeCategory === 'my-compensation') {
+    return (
+      <div className="category-panel-container">
+        {renderCategoryHeader(
+          'My Statutory Compensation Determination Sheet',
+          'Certified First Schedule statutory compensation statement passed under Sections 23, 26, 29, 30(2), and 30(3) of RFCTLARR Act 2013 for Survey #1042.',
+          'COMPENSATION ENTITLEMENT',
+          '#00b545',
+          'Total Award: ₹1,61,37,450'
+        )}
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 18 }}>
+          {/* Statutory Breakdown Table */}
+          <div style={{ background: '#ffffff', border: '1px solid #e1e5e8', borderRadius: 12, padding: 22 }}>
+            <h3 style={{ margin: '0 0 16px', fontSize: 16, color: '#001e2b' }}>
+              First Schedule Legal Entitlement Computation
+            </h3>
+
+            <div style={{ display: 'grid', gap: 12, fontSize: 13 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: 8, borderBottom: '1px solid #eceff1' }}>
+                <span style={{ color: '#5c6c7a' }}>Base Land Value (Circle Rate × 1.25 Ha):</span>
+                <strong style={{ color: '#001e2b' }}>₹52,50,000</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: 8, borderBottom: '1px solid #eceff1' }}>
+                <span style={{ color: '#5c6c7a' }}>Rural Multiplier Factor (1.25x Distance Buffer):</span>
+                <strong style={{ color: '#001e2b' }}>₹13,12,500</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: 8, borderBottom: '1px solid #eceff1' }}>
+                <span style={{ color: '#5c6c7a' }}>Value of Assets & Mango Trees (Section 29):</span>
+                <strong style={{ color: '#001e2b' }}>₹8,40,000</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: 8, borderBottom: '1px solid #eceff1', color: '#00684a', fontWeight: 600 }}>
+                <span>Subtotal Market Value (Component A):</span>
+                <strong>₹74,02,500</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: 8, borderBottom: '1px solid #eceff1', color: '#00684a', fontWeight: 600 }}>
+                <span>100% Mandatory Solatium (Section 30(2)) (Component B):</span>
+                <strong>₹74,02,500</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: 8, borderBottom: '1px solid #eceff1', color: '#7b3ff2', fontWeight: 600 }}>
+                <span>12% p.a. Additional Market Value (Section 30(3) - 18 Mos):</span>
+                <strong>₹13,32,450</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 10, fontSize: 16, color: '#001e2b', fontWeight: 700 }}>
+                <span>Grand Total Certified Award Payable:</span>
+                <span style={{ color: '#00684a' }}>₹1,61,37,450</span>
+              </div>
+            </div>
+
+            <div style={{ marginTop: 20 }}>
+              <button
+                onClick={() => showToast('Downloaded Form 14 Certified Award Decree Statement (PDF)')}
+                style={{
+                  background: '#00684a',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: 9999,
+                  padding: '10px 20px',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Download Certified Form 14 Statement (PDF) ⬇
+              </button>
+            </div>
+          </div>
+
+          {/* Solatium & Tax Exemption Notice */}
+          <div style={{ background: '#001e2b', color: '#ffffff', borderRadius: 12, padding: 24 }}>
+            <span style={{ font: '700 11px "DM Mono"', color: '#00ed64', letterSpacing: '0.08em' }}>
+              SECTION 96 TAX EXEMPTION
+            </span>
+            <h3 style={{ margin: '4px 0 14px', fontSize: 18, color: '#ffffff' }}>
+              100% Income Tax & Stamp Duty Exempt
+            </h3>
+            <p style={{ fontSize: 13, color: '#c1ccd6', lineHeight: 1.5 }}>
+              Under <strong>Section 96 of RFCTLARR Act 2013</strong>, no income tax, capital gains tax, or stamp duty can be levied on any award or agreement made under this Act. The gross amount of <strong>₹1,61,37,450</strong> is credited without TDS deduction.
+            </p>
+            <div style={{ marginTop: 18, padding: 12, background: 'rgba(0,237,100,0.1)', border: '1px solid #00ed64', borderRadius: 8 }}>
+              <small style={{ color: '#a7f3d0', fontSize: 11 }}>
+                Section 96 Certificate Reference: <strong>SEC96-EXEMPT-KRN-2026-1042</strong>
+              </small>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // =========================================================================
+  // CITIZEN CATEGORY 5: PFMS DISBURSEMENTS (MY-PAYMENTS)
+  // =========================================================================
+  if (activeCategory === 'my-payments') {
+    return (
+      <div className="category-panel-container">
+        {renderCategoryHeader(
+          'PFMS Direct Benefit Transfer (DBT) Bank Tracker',
+          'Electronic compensation disbursement status integrated with Public Financial Management System (PFMS) and Reserve Bank of India NEFT/RTGS gateway.',
+          'PFMS DBT DISBURSEMENT',
+          '#00684a',
+          'Disbursed & Credited ✓'
+        )}
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 18 }}>
+          {/* Bank Transaction Receipt */}
+          <div style={{ background: '#ffffff', border: '1px solid #e1e5e8', borderRadius: 12, padding: 22 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div>
+                <span style={{ fontSize: 11, fontFamily: 'DM Mono', color: '#00684a', fontWeight: 700 }}>NEFT/RTGS TRANSACTION</span>
+                <h3 style={{ margin: '2px 0 0', fontSize: 18, color: '#001e2b' }}>
+                  ₹1,61,37,450 CREDITED
+                </h3>
+              </div>
+              <span style={{ background: '#c3f0d2', color: '#00684a', padding: '4px 10px', borderRadius: 4, fontWeight: 700, fontSize: 12 }}>
+                ✓ SUCCESSFUL
               </span>
             </div>
-            <div style={{ fontSize: 13, color: '#1c2d38', display: 'grid', gap: 6 }}>
-              <div><strong>Bank Account:</strong> State Bank of India (Ending ...4092)</div>
-              <div><strong>PFMS UTR:</strong> PFMS202688419201</div>
-              <div><strong>Disbursement Date:</strong> 2026-08-28</div>
-              <div><strong>Disbursement Mode:</strong> Direct Benefit Transfer (DBT)</div>
+
+            <div style={{ display: 'grid', gap: 12, fontSize: 13 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: 8, borderBottom: '1px solid #eceff1' }}>
+                <span style={{ color: '#5c6c7a' }}>Beneficiary Name:</span>
+                <strong style={{ color: '#001e2b' }}>Asha Devi w/o Late Ram Prasad</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: 8, borderBottom: '1px solid #eceff1' }}>
+                <span style={{ color: '#5c6c7a' }}>Bank & Branch:</span>
+                <strong style={{ color: '#001e2b' }}>State Bank of India (Kurnool Main Branch)</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: 8, borderBottom: '1px solid #eceff1' }}>
+                <span style={{ color: '#5c6c7a' }}>Bank Account Number:</span>
+                <strong style={{ fontFamily: 'DM Mono', color: '#001e2b' }}>•••• •••• •••• 4092</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: 8, borderBottom: '1px solid #eceff1' }}>
+                <span style={{ color: '#5c6c7a' }}>IFSC Code:</span>
+                <strong style={{ fontFamily: 'DM Mono', color: '#001e2b' }}>SBIN0001248</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: 8, borderBottom: '1px solid #eceff1' }}>
+                <span style={{ color: '#5c6c7a' }}>PFMS UTR Number:</span>
+                <strong style={{ fontFamily: 'DM Mono', color: '#00684a' }}>SBINR5202609060081294</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: 8, borderBottom: '1px solid #eceff1' }}>
+                <span style={{ color: '#5c6c7a' }}>Credit Timestamp:</span>
+                <strong style={{ fontFamily: 'DM Mono', color: '#001e2b' }}>06 Sep 2026, 11:42 AM IST</strong>
+              </div>
+            </div>
+
+            <div style={{ marginTop: 20 }}>
+              <button
+                onClick={() => showToast('Downloaded PFMS Official Electronic Payment Receipt (PDF)')}
+                style={{
+                  background: '#001e2b',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: 9999,
+                  padding: '10px 20px',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Download Official Bank Credit Advice (PDF) ⬇
+              </button>
+            </div>
+          </div>
+
+          {/* NPCI & Aadhaar Seeding */}
+          <div style={{ background: '#ffffff', border: '1px solid #e1e5e8', borderRadius: 12, padding: 22 }}>
+            <h3 style={{ margin: '0 0 14px', fontSize: 16, color: '#001e2b' }}>NPCI Aadhaar Payment Bridge</h3>
+            <div style={{ display: 'grid', gap: 10, fontSize: 13 }}>
+              <div style={{ padding: 12, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8 }}>
+                <strong style={{ color: '#00684a', display: 'block' }}>✓ Aadhaar Seeding Active</strong>
+                <small style={{ color: '#5c6c7a' }}>Direct Benefit Transfer routed via NPCI Aadhaar Payment Bridge (APB)</small>
+              </div>
+              <div style={{ padding: 12, background: '#f8faf9', border: '1px solid #e2e8f0', borderRadius: 8 }}>
+                <span style={{ color: '#5c6c7a', fontSize: 11 }}>PFMS Sanction Authority:</span>
+                <div style={{ fontWeight: 600, color: '#001e2b' }}>Ministry of Road Transport / CALA District Escrow</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // =========================================================================
+  // CITIZEN CATEGORY 6: GRIEVANCES & R&R (GRIEVANCES)
+  // =========================================================================
+  if (activeCategory === 'grievances') {
+    return (
+      <div className="category-panel-container">
+        {renderCategoryHeader(
+          'Citizen Grievance & Resettlement Assistance Desk',
+          'File formal complaints and requests regarding land acquisition, rehabilitation entitlements, family census discrepancies, or physical resettlement assistance under Second Schedule.',
+          'GRIEVANCE PORTAL',
+          '#7b3ff2',
+          'Grievance Redressal Mechanism'
+        )}
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 18 }}>
+          {/* Active Grievances */}
+          <div style={{ background: '#ffffff', border: '1px solid #e1e5e8', borderRadius: 12, padding: 22 }}>
+            <h3 style={{ margin: '0 0 16px', fontSize: 16, color: '#001e2b' }}>Track Existing Grievance</h3>
+            <div style={{ padding: 16, background: '#f8faf9', border: '1px solid #e2e8f0', borderRadius: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                <span style={{ fontFamily: 'DM Mono', fontWeight: 700, color: '#7b3ff2' }}>GRV-2026-RNR-019</span>
+                <span style={{ background: '#fff8e0', color: '#946f3f', padding: '2px 8px', borderRadius: 4, fontWeight: 700, fontSize: 11 }}>
+                  Under Investigation
+                </span>
+              </div>
+              <strong style={{ color: '#001e2b', display: 'block', marginBottom: 4 }}>
+                Second Schedule Resettlement Housing Assistance Allotment
+              </strong>
+              <p style={{ fontSize: 12, color: '#5c6c7a', margin: '0 0 8px', lineHeight: 1.4 }}>
+                Request for allocation of constructed house plot in Resettlement Colony Ward 3 under Second Schedule Item 1. Notice issued to Tehsildar for verification.
+              </p>
+              <div style={{ fontSize: 11, color: '#688072' }}>
+                Officer Assigned: <strong>Administrator R&R / Sub-Divisional Magistrate</strong>
+              </div>
+            </div>
+          </div>
+
+          {/* New Grievance Form */}
+          <div style={{ background: '#ffffff', border: '1px solid #e1e5e8', borderRadius: 12, padding: 22 }}>
+            <h3 style={{ margin: '0 0 14px', fontSize: 16, color: '#001e2b' }}>Lodge New Grievance</h3>
+            <div style={{ display: 'grid', gap: 12 }}>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: '#1c2d38' }}>Grievance Category</label>
+                <select style={{ width: '100%', height: 36, padding: '0 8px', borderRadius: 6, border: '1px solid #c1ccd6', marginTop: 4 }}>
+                  <option>Second Schedule R&R Family Entitlements</option>
+                  <option>Boundary Demarcation / Encroachment Issue</option>
+                  <option>Compensation Apportionment Dispute Between Co-sharers</option>
+                  <option>Delay in Physical Possession Notice</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: '#1c2d38' }}>Description of Complaint</label>
+                <textarea
+                  rows={3}
+                  placeholder="Explain the issue clearly with survey number..."
+                  style={{ width: '100%', padding: 8, borderRadius: 6, border: '1px solid #c1ccd6', marginTop: 4 }}
+                />
+              </div>
+              <button
+                onClick={() => showToast('Grievance registered successfully! Tracking ID: GRV-2026-RNR-020')}
+                style={{
+                  background: '#7b3ff2',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: 9999,
+                  padding: '10px 0',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  marginTop: 6,
+                }}
+              >
+                Register Formal Grievance ➔
+              </button>
             </div>
           </div>
         </div>

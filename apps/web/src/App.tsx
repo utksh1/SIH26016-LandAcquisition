@@ -1337,10 +1337,7 @@ export default function App() {
         showToast('Acquisition project has reached final completed stage!')
       } else if (nextStage) {
         setCurrentStageIdx(nextIdx)
-        const targetPersonaId = stageToPersonaMap[nextIdx]
-        const found = stakeholderPersonas.find((p) => p.id === targetPersonaId)
-        if (found) setActivePersona(found)
-        showToast(`Advanced to Stage ${nextIdx + 1}: ${nextStage.name}! Role: ${nextStage.actor}`)
+        showToast(`Advanced to Stage ${nextIdx + 1}: ${nextStage.name}! Designated Role: ${nextStage.actor}`)
       }
       setShowGateReviewModal(false)
       setGateDocs([])
@@ -3554,10 +3551,7 @@ export default function App() {
                         key={stage.id}
                         onClick={() => {
                           setCurrentStageIdx(idx)
-                          const targetPersonaId = stageToPersonaMap[idx]
-                          const found = stakeholderPersonas.find((p) => p.id === targetPersonaId)
-                          if (found) setActivePersona(found)
-                          showToast(`Switched to: ${stage.name} (${found?.title})`)
+                          showToast(`Viewing Stage ${idx + 1}: ${stage.name} (${stage.statutorySection})`)
                         }}
                         style={{ cursor: 'pointer', minWidth: 120 }}
                       >
@@ -3598,19 +3592,19 @@ export default function App() {
                       Sign-off as {rfctlarrStages[currentStageIdx].actor} ➔
                     </button>
                   ) : (
-                    <button
-                      className="secondary-button"
-                      onClick={() => {
-                        const targetPersonaId = stageToPersonaMap[currentStageIdx]
-                        const found = stakeholderPersonas.find((p) => p.id === targetPersonaId)
-                        if (found) {
-                          setActivePersona(found)
-                          showToast(`Switched to designated role: ${found.title}`)
-                        }
+                    <span
+                      style={{
+                        padding: '8px 16px',
+                        background: '#f4f7f6',
+                        border: '1px solid #ced6cb',
+                        borderRadius: 6,
+                        fontSize: 12,
+                        color: '#607567',
+                        fontWeight: 600,
                       }}
                     >
-                      Switch to {rfctlarrStages[currentStageIdx].actor} ➔
-                    </button>
+                      Awaiting Sign-off from {rfctlarrStages[currentStageIdx].actor}
+                    </span>
                   )}
                 </div>
               </section>
