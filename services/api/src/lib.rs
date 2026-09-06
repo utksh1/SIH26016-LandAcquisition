@@ -905,8 +905,76 @@ pub fn app(state: AppState) -> Router {
         .route("/deposits/parcel/:id", get(list_deposits_for_parcel))
         .route("/deposits", post(create_deposit_with_authority))
         .route("/deposits/:id/release", post(release_deposit))
+        // Serve the frontend static files. The platform's reverse proxy
+        // forwards all requests to port 3000, so the API must also serve
+        // the React SPA. Non-API routes fall back to index.html (SPA routing).
+        .fallback(serve_frontend)
         .layer(cors)
         .with_state(state)
+}
+
+/// Serve the frontend static files from apps/web/dist. Non-API routes
+/// return the SPA index.html so client-side routing works.
+async fn serve_frontend(
+    req: axum::extract::Request,
+) -> Result<axum::response::Response, ApiError> {
+    use axum::body::Body;
+    use axum::http::{header, StatusCode};
+    use axum::response::IntoResponse;
+    use std::path::PathBuf;
+
+    let dist_dir = std::env::var("FRONTEND_DIST")
+        .unwrap_or_else(|_| "apps/web/dist".to_string());
+
+    let path = req.uri().path().trim_start_matches('/');
+    let file_path = if path.is_empty() || path == "index.html" {
+        PathBuf::from(&dist_dir).join("index.html")
+    } else {
+        PathBuf::from(&dist_dir).join(path)
+    };
+
+    // Security: prevent path traversal
+    if !file_path.starts_with(&dist_dir) {
+        return Err(ApiError::BadRequest("invalid path".to_string()));
+    }
+
+    match tokio::fs::read(&file_path).await {
+        Ok(contents) => {
+            let content_type = match file_path.extension().and_then(|e| e.to_str()) {
+                Some("html") => "text/html; charset=utf-8",
+                Some("js") => "text/javascript; charset=utf-8",
+                Some("css") => "text/css; charset=utf-8",
+                Some("json") => "application/json; charset=utf-8",
+                Some("png") => "image/png",
+                Some("svg") => "image/svg+xml",
+                Some("ico") => "image/x-icon",
+                Some("woff") => "font/woff",
+                Some("woff2") => "font/woff2",
+                Some("map") => "application/json",
+                _ => "application/octet-stream",
+            };
+            let mut response = axum::response::Response::new(Body::from(contents));
+            response.headers_mut().insert(
+                header::CONTENT_TYPE,
+                header::HeaderValue::from_str(content_type).unwrap(),
+            );
+            Ok(response)
+        }
+        Err(_) => {
+            // SPA fallback: serve index.html for any unknown route
+            match tokio::fs::read(PathBuf::from(&dist_dir).join("index.html")).await {
+                Ok(contents) => {
+                    let mut response = axum::response::Response::new(Body::from(contents));
+                    response.headers_mut().insert(
+                        header::CONTENT_TYPE,
+                        header::HeaderValue::from_str("text/html; charset=utf-8").unwrap(),
+                    );
+                    Ok(response)
+                }
+                Err(_) => Err(ApiError::NotFound("frontend not built".to_string())),
+            }
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize)]
