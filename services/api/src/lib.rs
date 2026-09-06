@@ -788,6 +788,11 @@ pub fn app(state: AppState) -> Router {
         .route("/mock-ehrms/employees", get(list_mock_ehrms_employees))
         .route("/dashboard/kpis", get(get_dashboard_kpis))
         .route("/alerts", get(get_alerts))
+        .route("/parcels/:id/ownership", get(get_parcel_ownership))
+        .route("/parcels/:id/ownership", post(set_parcel_ownership))
+        .route("/deposits/parcel/:id", get(list_deposits_for_parcel))
+        .route("/deposits", post(create_deposit_with_authority))
+        .route("/deposits/:id/release", post(release_deposit))
         .layer(cors)
         .with_state(state)
 }
@@ -1573,11 +1578,118 @@ async fn approve_workflow_endpoint(
     JsonBody(request): JsonBody<StageGateDecisionRequest>,
 ) -> Result<Json<StageGateDecisionResponse>, ApiError> {
     let now = Utc::now();
+
+    // ============================================================
+    // PHASE 1 (read-only, no lock): resolve workflow_id + project_id +
+    // current_stage + next_stage so we can run the timeline gate checks.
+    // This avoids holding the in_mem write lock across DB awaits.
+    // ============================================================
+    let (workflow_id, project_id, current_stage, next_stage) = {
+        let in_mem = state.in_memory.read().unwrap();
+        let workflow_id = resolve_workflow_instance(&in_mem, &id_str)?;
+        let instance = in_mem
+            .workflows
+            .get(&workflow_id)
+            .ok_or_else(|| ApiError::NotFound(format!("Workflow not found for ID '{}'", workflow_id)))?;
+        let project_id = instance.project_id;
+        let current_stage = instance.current_stage;
+        let next_stage = next_statutory_stage(&current_stage).unwrap_or(ProjectStage::ProjectClosure);
+        (workflow_id, project_id, current_stage, next_stage)
+    };
+
+    // ============================================================
+    // PHASE 2: STATUTORY TIMELINE GATE (Master PDF §22, §36)
+    // Enforces:
+    //   - §22.2 60-day LARR / 21-day NH objection window must close
+    //     before ObjectionPeriod → Hearing
+    //   - §22.3 Declaration within 12 months of Section 11
+    //   - §22.6 80% compensation paid before Possession (Section 38)
+    //   - §36   Active court stay blocks all transitions
+    // Runs BEFORE acquiring the write lock so DB awaits don't deadlock.
+    // ============================================================
+    {
+        let project = {
+            let in_mem = state.in_memory.read().unwrap();
+            in_mem.projects.get(&project_id).cloned()
+        };
+        if let Some(project) = project {
+            // Pull active court stays from the litigation_case table if we
+            // have a DB pool. Falls back to empty slice (no stays) when DB
+            // is unavailable — preserves the no-DB demo-mode behavior.
+            let stays: Vec<(DateTime<Utc>, DateTime<Utc>)> = if let Some(ref pool) = state.pool {
+                sqlx::query(
+                    "SELECT stay_from, stay_to FROM litigation_case
+                     WHERE project_id = $1
+                       AND status = 'stayed'
+                       AND stay_from IS NOT NULL
+                       AND stay_to IS NOT NULL"
+                )
+                .bind(project_id)
+                .fetch_all(pool)
+                .await
+                .unwrap_or_default()
+                .into_iter()
+                .map(|r| {
+                    use sqlx::Row;
+                    let from: DateTime<Utc> = r.try_get("stay_from").unwrap_or_else(|_| Utc::now());
+                    let to: DateTime<Utc> = r.try_get("stay_to").unwrap_or_else(|_| Utc::now() + chrono::Duration::days(365));
+                    (from, to)
+                })
+                .collect()
+            } else {
+                Vec::new()
+            };
+
+            // Pull compensation totals from award + payment tables for the
+            // §22.6 80% gate. None = fail open (MVP behavior).
+            let (paid_paise, awarded_paise): (Option<i64>, Option<i64>) = if let Some(ref pool) = state.pool {
+                let awarded: Option<i64> = sqlx::query(
+                    "SELECT coalesce(sum(total_paise), 0)::bigint FROM award WHERE project_id = $1"
+                )
+                .bind(project_id)
+                .fetch_one(pool)
+                .await
+                .ok()
+                .map(|r| { use sqlx::Row; r.try_get::<i64, _>(0).unwrap_or(0) });
+
+                let paid: Option<i64> = sqlx::query(
+                    "SELECT coalesce(sum(p.amount_paise), 0)::bigint
+                     FROM payment p
+                     JOIN award a ON p.award_id = a.id
+                     WHERE a.project_id = $1 AND p.status = 'paid'"
+                )
+                .bind(project_id)
+                .fetch_one(pool)
+                .await
+                .ok()
+                .map(|r| { use sqlx::Row; r.try_get::<i64, _>(0).unwrap_or(0) });
+
+                (paid, awarded)
+            } else {
+                (None, None)
+            };
+
+            if let Err(gate_failure) = sih_workflow::check_timeline_gates(
+                &project,
+                &next_stage,
+                now,
+                &stays,
+                paid_paise,
+                awarded_paise,
+            ) {
+                return Err(ApiError::BadRequest(format!(
+                    "Timeline gate failed ({}): {}",
+                    gate_failure.code, gate_failure.message
+                )));
+            }
+        }
+    }
+
+    // ============================================================
+    // PHASE 3 (write lock): role authorization + document check +
+    // stage mutation + audit log + DB persistence. The original logic.
+    // ============================================================
     let (
-        workflow_id,
-        project_id,
-        current_stage,
-        next_stage,
         next_handler,
         actor_name,
         actor_role,
@@ -1587,15 +1699,6 @@ async fn approve_workflow_endpoint(
         updated_instance,
     ) = {
         let mut in_mem = state.in_memory.write().unwrap();
-        let workflow_id = resolve_workflow_instance(&in_mem, &id_str)?;
-
-        let (project_id, current_stage) = {
-            let instance = in_mem
-                .workflows
-                .get(&workflow_id)
-                .ok_or_else(|| ApiError::NotFound(format!("Workflow not found for ID '{}'", workflow_id)))?;
-            (instance.project_id, instance.current_stage)
-        };
 
         let handler = sih_workflow::who_handles_stage(&current_stage);
         let (actor_name, actor_role, actor_dept) = resolve_actor_details(&in_mem, &request.user);
@@ -1629,7 +1732,6 @@ async fn approve_workflow_endpoint(
             )));
         }
 
-        let next_stage = next_statutory_stage(&current_stage).unwrap_or(ProjectStage::ProjectClosure);
         let next_handler = sih_workflow::who_handles_stage(&next_stage);
         let stage_deadline = Some(now + chrono::Duration::days(next_handler.timeline_days as i64));
 
@@ -1730,10 +1832,6 @@ async fn approve_workflow_endpoint(
         in_mem.audit_log.push(entry);
 
         (
-            workflow_id,
-            project_id,
-            current_stage,
-            next_stage,
             next_handler,
             actor_name,
             actor_role,
@@ -3519,6 +3617,346 @@ async fn get_alerts(
             tone: "gold".to_string(),
         },
     ]))
+}
+
+// ============================================================
+// OWNERSHIP STATUS + DEPOSIT WITH AUTHORITY ENDPOINTS
+// (Master PDF §3, migration 007)
+// Handles the Section 77 / 3H(2) deposit-with-authority sub-flow
+// for parcels where compensation cannot be paid to a person.
+// ============================================================
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct OwnershipStatusResponse {
+    pub parcel_id: Uuid,
+    pub survey_number: String,
+    pub ownership_status: String,
+    pub has_active_deposit: bool,
+}
+
+async fn get_parcel_ownership(
+    State(state): State<AppState>,
+    Path(parcel_id): Path<Uuid>,
+) -> Result<Json<OwnershipStatusResponse>, ApiError> {
+    let pool = state.pool.as_ref().ok_or_else(|| ApiError::ServiceUnavailable("Database required for ownership status".to_string()))?;
+    use sqlx::Row;
+    let row = sqlx::query(
+        "SELECT id, survey_number, ownership_status::text as ownership_status
+         FROM parcel WHERE id = $1"
+    )
+    .bind(parcel_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| ApiError::BadRequest(format!("DB error: {e}")))?
+    .ok_or_else(|| ApiError::NotFound(format!("Parcel {parcel_id} not found")))?;
+
+    let survey_number: String = row.try_get("survey_number").unwrap_or_default();
+    let ownership_status: String = row.try_get("ownership_status").unwrap_or_else(|_| "clear".to_string());
+
+    let active_deposit: bool = sqlx::query(
+        "SELECT EXISTS(SELECT 1 FROM deposit_with_authority WHERE parcel_id = $1 AND released_at IS NULL)"
+    )
+    .bind(parcel_id)
+    .fetch_one(pool)
+    .await
+    .map(|r| r.get::<bool, _>(0))
+    .unwrap_or(false);
+
+    Ok(Json(OwnershipStatusResponse {
+        parcel_id,
+        survey_number,
+        ownership_status,
+        has_active_deposit: active_deposit,
+    }))
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SetOwnershipRequest {
+    pub ownership_status: String,
+    pub actor: Option<String>,
+}
+
+async fn set_parcel_ownership(
+    State(state): State<AppState>,
+    Path(parcel_id): Path<Uuid>,
+    JsonBody(request): JsonBody<SetOwnershipRequest>,
+) -> Result<Json<OwnershipStatusResponse>, ApiError> {
+    let pool = state.pool.as_ref().ok_or_else(|| ApiError::ServiceUnavailable("Database required".to_string()))?;
+    use sqlx::Row;
+    let status = request.ownership_status.trim().to_lowercase();
+    if !["clear", "disputed", "untraceable", "under_litigation", "multiple_claimants"].contains(&status.as_str()) {
+        return Err(ApiError::BadRequest(format!(
+            "Invalid ownership_status '{}'. Valid values: clear, disputed, untraceable, under_litigation, multiple_claimants", status
+        )));
+    }
+
+    sqlx::query("UPDATE parcel SET ownership_status = $1::ownership_status, updated_at = now() WHERE id = $2")
+        .bind(&status)
+        .bind(parcel_id)
+        .execute(pool)
+        .await
+        .map_err(|e| ApiError::BadRequest(format!("DB error: {e}")))?;
+
+    // Audit log entry
+    let prev_hash_row = sqlx::query("SELECT row_hash FROM audit_log ORDER BY id DESC LIMIT 1")
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| ApiError::BadRequest(format!("DB error: {e}")))?;
+    let prev_hash: String = prev_hash_row
+        .as_ref()
+        .and_then(|r| r.try_get::<String, _>("row_hash").ok())
+        .unwrap_or_default();
+    let payload = json!({
+        "action": "ownership_status_changed",
+        "parcel_id": parcel_id,
+        "new_status": status,
+        "actor": request.actor,
+    });
+    let mut hasher = sha2::Sha256::new();
+    hasher.update(prev_hash.as_bytes());
+    hasher.update(payload.to_string().as_bytes());
+    hasher.update(Utc::now().timestamp_nanos_opt().unwrap_or(0).to_string().as_bytes());
+    let row_hash = format!("{:x}", hasher.finalize());
+
+    sqlx::query(
+        "INSERT INTO audit_log (occurred_at, tenant_id, actor_role, action, entity_type, entity_id, new_value, previous_hash, row_hash)
+         VALUES (now(), '00000000-0000-0000-0000-000000000001', 'admin', 'OWNERSHIP_STATUS_CHANGED', 'parcel', $1, $2, $3, $4)"
+    )
+    .bind(parcel_id)
+    .bind(&payload)
+    .bind(&prev_hash)
+    .bind(&row_hash)
+    .execute(pool)
+    .await
+    .map_err(|e| ApiError::BadRequest(format!("DB error: {e}")))?;
+
+    // Re-fetch and return
+    let row = sqlx::query("SELECT survey_number, ownership_status::text as ownership_status FROM parcel WHERE id = $1")
+        .bind(parcel_id)
+        .fetch_one(pool)
+        .await
+        .map_err(|e| ApiError::BadRequest(format!("DB error: {e}")))?;
+    Ok(Json(OwnershipStatusResponse {
+        parcel_id,
+        survey_number: row.try_get("survey_number").unwrap_or_default(),
+        ownership_status: row.try_get("ownership_status").unwrap_or_else(|_| "clear".to_string()),
+        has_active_deposit: false,
+    }))
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DepositWithAuthorityRecord {
+    pub id: Uuid,
+    pub parcel_id: Uuid,
+    pub award_id: Option<Uuid>,
+    pub amount_paise: i64,
+    pub deposit_reason: String,
+    pub court_reference: Option<String>,
+    pub deposited_at: DateTime<Utc>,
+    pub released_at: Option<DateTime<Utc>>,
+    pub release_beneficiary: Option<String>,
+    pub status: String,
+    pub notes: Option<String>,
+}
+
+async fn list_deposits_for_parcel(
+    State(state): State<AppState>,
+    Path(parcel_id): Path<Uuid>,
+) -> Result<Json<Vec<DepositWithAuthorityRecord>>, ApiError> {
+    let pool = state.pool.as_ref().ok_or_else(|| ApiError::ServiceUnavailable("Database required".to_string()))?;
+    use sqlx::Row;
+    let rows = sqlx::query(
+        "SELECT id, parcel_id, award_id, amount_paise::bigint, deposit_reason::text, court_reference,
+                deposited_at, released_at, release_beneficiary, status, notes
+         FROM deposit_with_authority
+         WHERE parcel_id = $1
+         ORDER BY deposited_at DESC"
+    )
+    .bind(parcel_id)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| ApiError::BadRequest(format!("DB error: {e}")))?;
+
+    let deposits = rows.into_iter().map(|r| DepositWithAuthorityRecord {
+        id: r.try_get("id").unwrap_or_default(),
+        parcel_id: r.try_get("parcel_id").unwrap_or_default(),
+        award_id: r.try_get("award_id").ok(),
+        amount_paise: r.try_get("amount_paise").unwrap_or(0),
+        deposit_reason: r.try_get("deposit_reason").unwrap_or_else(|_| "disputed".to_string()),
+        court_reference: r.try_get("court_reference").ok(),
+        deposited_at: r.try_get("deposited_at").unwrap_or_else(|_| Utc::now()),
+        released_at: r.try_get("released_at").ok(),
+        release_beneficiary: r.try_get("release_beneficiary").ok(),
+        status: r.try_get("status").unwrap_or_else(|_| "deposited".to_string()),
+        notes: r.try_get("notes").ok(),
+    }).collect();
+    Ok(Json(deposits))
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CreateDepositRequest {
+    pub parcel_id: Uuid,
+    pub award_id: Option<Uuid>,
+    pub amount_paise: i64,
+    pub deposit_reason: String,
+    pub court_reference: Option<String>,
+    pub notes: Option<String>,
+    pub actor: Option<String>,
+}
+
+async fn create_deposit_with_authority(
+    State(state): State<AppState>,
+    JsonBody(request): JsonBody<CreateDepositRequest>,
+) -> Result<Json<DepositWithAuthorityRecord>, ApiError> {
+    let pool = state.pool.as_ref().ok_or_else(|| ApiError::ServiceUnavailable("Database required".to_string()))?;
+    use sqlx::Row;
+    let reason = request.deposit_reason.trim().to_lowercase();
+    if !["disputed", "untraceable", "under_litigation", "multiple_claimants"].contains(&reason.as_str()) {
+        return Err(ApiError::BadRequest(format!(
+            "deposit_reason must be one of: disputed, untraceable, under_litigation, multiple_claimants (got '{}')", reason
+        )));
+    }
+    if request.amount_paise <= 0 {
+        return Err(ApiError::BadRequest("amount_paise must be positive".to_string()));
+    }
+
+    let row = sqlx::query(
+        "INSERT INTO deposit_with_authority (parcel_id, award_id, amount_paise, deposit_reason, court_reference, notes, deposited_at, status)
+         VALUES ($1, $2, $3, $4::ownership_status, $5, $6, now(), 'deposited')
+         RETURNING id, parcel_id, award_id, amount_paise::bigint, deposit_reason::text, court_reference, deposited_at, released_at, release_beneficiary, status, notes"
+    )
+    .bind(request.parcel_id)
+    .bind(request.award_id)
+    .bind(request.amount_paise)
+    .bind(&reason)
+    .bind(&request.court_reference)
+    .bind(&request.notes)
+    .fetch_one(pool)
+    .await
+    .map_err(|e| ApiError::BadRequest(format!("DB error: {e}")))?;
+
+    let record = DepositWithAuthorityRecord {
+        id: row.try_get("id").unwrap_or_default(),
+        parcel_id: row.try_get("parcel_id").unwrap_or_default(),
+        award_id: row.try_get("award_id").ok(),
+        amount_paise: row.try_get("amount_paise").unwrap_or(0),
+        deposit_reason: row.try_get("deposit_reason").unwrap_or_else(|_| "disputed".to_string()),
+        court_reference: row.try_get("court_reference").ok(),
+        deposited_at: row.try_get("deposited_at").unwrap_or_else(|_| Utc::now()),
+        released_at: row.try_get("released_at").ok(),
+        release_beneficiary: row.try_get("release_beneficiary").ok(),
+        status: row.try_get("status").unwrap_or_else(|_| "deposited".to_string()),
+        notes: row.try_get("notes").ok(),
+    };
+
+    // Audit log
+    let prev_hash: String = sqlx::query("SELECT row_hash FROM audit_log ORDER BY id DESC LIMIT 1")
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .and_then(|r| r.try_get::<String, _>("row_hash").ok())
+        .unwrap_or_default();
+    let payload = json!({
+        "action": "deposit_with_authority_created",
+        "parcel_id": request.parcel_id,
+        "deposit_id": record.id,
+        "amount_paise": request.amount_paise,
+        "reason": reason,
+        "actor": request.actor,
+    });
+    let mut hasher = sha2::Sha256::new();
+    hasher.update(prev_hash.as_bytes());
+    hasher.update(payload.to_string().as_bytes());
+    hasher.update(Utc::now().timestamp_nanos_opt().unwrap_or(0).to_string().as_bytes());
+    let row_hash = format!("{:x}", hasher.finalize());
+
+    let _ = sqlx::query(
+        "INSERT INTO audit_log (occurred_at, tenant_id, actor_role, action, entity_type, entity_id, new_value, previous_hash, row_hash)
+         VALUES (now(), '00000000-0000-0000-0000-000000000001', 'admin', 'DEPOSIT_WITH_AUTHORITY', 'deposit_with_authority', $1, $2, $3, $4)"
+    )
+    .bind(record.id)
+    .bind(&payload)
+    .bind(&prev_hash)
+    .bind(&row_hash)
+    .execute(pool)
+    .await;
+
+    Ok(Json(record))
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ReleaseDepositRequest {
+    pub release_beneficiary: String,
+    pub release_court_order: Option<String>,
+    pub actor: Option<String>,
+}
+
+async fn release_deposit(
+    State(state): State<AppState>,
+    Path(deposit_id): Path<Uuid>,
+    JsonBody(request): JsonBody<ReleaseDepositRequest>,
+) -> Result<Json<DepositWithAuthorityRecord>, ApiError> {
+    let pool = state.pool.as_ref().ok_or_else(|| ApiError::ServiceUnavailable("Database required".to_string()))?;
+    use sqlx::Row;
+    let row = sqlx::query(
+        "UPDATE deposit_with_authority
+         SET released_at = now(), release_beneficiary = $1, release_court_order = $2, status = 'released'
+         WHERE id = $3 AND released_at IS NULL
+         RETURNING id, parcel_id, award_id, amount_paise::bigint, deposit_reason::text, court_reference, deposited_at, released_at, release_beneficiary, status, notes"
+    )
+    .bind(&request.release_beneficiary)
+    .bind(&request.release_court_order)
+    .bind(deposit_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| ApiError::BadRequest(format!("DB error: {e}")))?
+    .ok_or_else(|| ApiError::NotFound(format!("Deposit {deposit_id} not found or already released")))?;
+
+    let record = DepositWithAuthorityRecord {
+        id: row.try_get("id").unwrap_or_default(),
+        parcel_id: row.try_get("parcel_id").unwrap_or_default(),
+        award_id: row.try_get("award_id").ok(),
+        amount_paise: row.try_get("amount_paise").unwrap_or(0),
+        deposit_reason: row.try_get("deposit_reason").unwrap_or_else(|_| "disputed".to_string()),
+        court_reference: row.try_get("court_reference").ok(),
+        deposited_at: row.try_get("deposited_at").unwrap_or_else(|_| Utc::now()),
+        released_at: row.try_get("released_at").ok(),
+        release_beneficiary: row.try_get("release_beneficiary").ok(),
+        status: row.try_get("status").unwrap_or_else(|_| "released".to_string()),
+        notes: row.try_get("notes").ok(),
+    };
+
+    // Audit log
+    let prev_hash: String = sqlx::query("SELECT row_hash FROM audit_log ORDER BY id DESC LIMIT 1")
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .and_then(|r| r.try_get::<String, _>("row_hash").ok())
+        .unwrap_or_default();
+    let payload = json!({
+        "action": "deposit_released",
+        "deposit_id": deposit_id,
+        "beneficiary": request.release_beneficiary,
+        "actor": request.actor,
+    });
+    let mut hasher = sha2::Sha256::new();
+    hasher.update(prev_hash.as_bytes());
+    hasher.update(payload.to_string().as_bytes());
+    hasher.update(Utc::now().timestamp_nanos_opt().unwrap_or(0).to_string().as_bytes());
+    let row_hash = format!("{:x}", hasher.finalize());
+
+    let _ = sqlx::query(
+        "INSERT INTO audit_log (occurred_at, tenant_id, actor_role, action, entity_type, entity_id, new_value, previous_hash, row_hash)
+         VALUES (now(), '00000000-0000-0000-0000-000000000001', 'admin', 'DEPOSIT_RELEASED', 'deposit_with_authority', $1, $2, $3, $4)"
+    )
+    .bind(deposit_id)
+    .bind(&payload)
+    .bind(&prev_hash)
+    .bind(&row_hash)
+    .execute(pool)
+    .await;
+
+    Ok(Json(record))
 }
 
 // Helpers

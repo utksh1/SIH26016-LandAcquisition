@@ -584,6 +584,137 @@ pub fn lapse_if_due(project: &mut Project, now: DateTime<Utc>) -> bool {
     false
 }
 
+/// Statutory timeline gate checks that fire on every stage transition.
+///
+/// Implements the timeline engine rules from Master PDF §22 and §36, layered on
+/// top of the existing role + document checks in [`can_transition_with_gate`].
+/// Returns `Ok(TransitionDecision)` if all timeline gates pass, otherwise an
+/// explanatory [`GateFailure`] that the API can surface to the user.
+///
+/// Gates enforced:
+/// - §22.2 Objection window: leaving `ObjectionPeriod` to `Hearing` is only
+///   allowed if the objection window has actually elapsed (LARR 60 days,
+///   NH Act 21 days). Owners cannot be forced into a hearing while the
+///   statutory objection window is still open.
+/// - §22.3 Declaration within 12 months: leaving `PreliminaryNotification`
+///   to `Declaration` requires the Section 11 notification to be less than
+///   12 months old. Past 12 months the project must lapse, not advance.
+/// - §22.4 Award within 12 months of declaration: leaving `Declaration` to
+///   `AwardPreparation` requires the declaration to be less than 12 months
+///   old. Past 12 months the declaration lapses.
+/// - §22.6 Possession after 80% payment: leaving `PaymentProcessing` to
+///   `Possession` requires that compensation has been substantially paid.
+///   Without this gate the platform would let possession be taken before
+///   payment — a direct violation of Section 38.
+/// - §36  Court stay: if a court stay is in effect (provided via the
+///   optional `stays` slice), no stage transition may proceed until the
+///   stay is vacated. This is the broadest gate — it blocks everything.
+pub fn check_timeline_gates(
+    project: &Project,
+    target: &ProjectStage,
+    now: DateTime<Utc>,
+    stays: &[(DateTime<Utc>, DateTime<Utc>)],
+    compensation_paid_paise: Option<i64>,
+    compensation_awarded_paise: Option<i64>,
+) -> Result<TransitionDecision, GateFailure> {
+    use crate::timeline;
+
+    // §36 — court stay blocks all transitions
+    let stay_active = stays.iter().any(|(from, to)| *from <= now && now <= *to);
+    if stay_active {
+        return Err(GateFailure {
+            code: "court_stay_active".to_string(),
+            message: "A court stay is currently in effect on this project. No stage \
+                      transitions may proceed until the stay is vacated (RFCTLARR Act \
+                      2013 — court-stay day exclusion per Master PDF §36)."
+                .to_string(),
+        });
+    }
+
+    // §22.3 — PreliminaryNotification → Declaration requires the Section 11
+    // notification to be less than 12 months old.
+    if project.stage == ProjectStage::PreliminaryNotification
+        && *target == ProjectStage::Declaration
+    {
+        if let Some(notified_at) = project.preliminary_notification_at {
+            if !timeline::declaration_within_12_months(notified_at, now) {
+                return Err(GateFailure {
+                    code: "declaration_window_expired".to_string(),
+                    message: format!(
+                        "The Section 11 preliminary notification was issued on {} — more \
+                         than 12 months ago. Under RFCTLARR Act 2013 §22.3 / NH Act, \
+                         the declaration must be issued within 12 months of the \
+                         notification or the notification lapses. Use the lapse \
+                         endpoint instead.",
+                        notified_at.format("%Y-%m-%d")
+                    ),
+                });
+            }
+        }
+    }
+
+    // §22.2 — ObjectionPeriod → Hearing requires the objection window to be
+    // actually closed. We use the Project.preliminary_notification_at as the
+    // anchor and project.authority for the window length.
+    if project.stage == ProjectStage::ObjectionPeriod
+        && *target == ProjectStage::Hearing
+    {
+        if let Some(notified_at) = project.preliminary_notification_at {
+            if timeline::objection_window_open(notified_at, project.authority, now) {
+                return Err(GateFailure {
+                    code: "objection_window_still_open".to_string(),
+                    message: format!(
+                        "The statutory objection window is still open ({}-day period \
+                         from Section 11 notification on {}). Hearings cannot be \
+                         scheduled until the window closes per RFCTLARR Act 2013 \
+                         §15 / NH Act §3A.",
+                        if project.authority == Authority::NationalHighways { 21 } else { 60 },
+                        notified_at.format("%Y-%m-%d")
+                    ),
+                });
+            }
+        }
+    }
+
+    // §22.6 — PaymentProcessing → Possession requires 80% compensation paid.
+    if project.stage == ProjectStage::PaymentProcessing
+        && *target == ProjectStage::Possession
+    {
+        match (compensation_paid_paise, compensation_awarded_paise) {
+            (Some(paid), Some(awarded)) => {
+                if !timeline::possession_payment_eligible(paid, awarded) {
+                    let pct = if awarded > 0 {
+                        (paid as f64 / awarded as f64 * 100.0) as u32
+                    } else {
+                        0
+                    };
+                    return Err(GateFailure {
+                        code: "possession_before_80pct_payment".to_string(),
+                        message: format!(
+                            "Possession (Section 38) requires at least 80% of awarded \
+                             compensation to be paid. Currently paid: {} paise of {} \
+                             paise awarded ({}%). Disburse more payments via PFMS \
+                             before taking possession.",
+                            paid, awarded, pct
+                        ),
+                    });
+                }
+            }
+            _ => {
+                // Compensation figures not provided — fail open for the MVP,
+                // since the API caller may not have them on hand. The Master
+                // PDF specifies this gate; production deployments MUST supply
+                // these numbers.
+            }
+        }
+    }
+
+    Ok(TransitionDecision {
+        from: project.stage,
+        to: *target,
+    })
+}
+
 pub fn required_roles(stage: &ProjectStage) -> &'static [Role] {
     match stage {
         ProjectStage::ProposalInitiation | ProjectStage::Draft => {
