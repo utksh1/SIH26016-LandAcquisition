@@ -220,6 +220,27 @@ export interface WorkflowStatusResponse {
   recent_actions: ApprovalAction[]
 }
 
+/** A task assigned to a stakeholder role — the per-persona task queue. */
+export interface MyTaskItem {
+  workflow_id: string
+  project_id: string
+  project_name: string
+  current_stage: string
+  current_stage_name: string
+  responsible_department: string
+  responsible_role: string
+  approval_authority: string
+  timeline_days: number
+  deadline_at?: string | null
+  days_remaining?: number | null
+  is_overdue: boolean
+  required_documents: string[]
+  uploaded_documents: string[]
+  missing_documents: string[]
+  can_advance: boolean
+  is_terminal: boolean
+}
+
 export interface ApprovalAction {
   id: string
   workflow_instance_id: string
@@ -306,6 +327,8 @@ export interface ApiClient {
   approveWorkflow(id: string, payload: StageGateDecisionPayload): Promise<StageGateDecisionResponse>
   rejectWorkflow(id: string, payload: StageGateDecisionPayload): Promise<StageGateDecisionResponse>
   getWorkflowStatus(id: string): Promise<WorkflowStatusResponse>
+  getMyTasks(role: string): Promise<MyTaskItem[]>
+  getMyTasksAuthenticated(): Promise<MyTaskItem[]>
   getWorkflowHistory(workflowId: string): Promise<ApprovalAction[]>
   listWorkflowRegimes(): Promise<WorkflowRegime[]>
   listDepartments(): Promise<DepartmentInfo[]>
@@ -399,6 +422,8 @@ export const apiPaths = {
   workflowReject: (workflowId: string) => `/workflow/${encodeURIComponent(workflowId)}/reject`,
   workflowHistory: (workflowId: string) => `/workflow/${encodeURIComponent(workflowId)}/history`,
   workflowStatus: (workflowId: string) => `/workflow/${encodeURIComponent(workflowId)}/status`,
+  myTasks: (role: string) => `/workflow/my-tasks/${encodeURIComponent(role)}`,
+  myTasksAuthenticated: '/workflow/my-tasks',
   workflowRegimes: '/workflow/regimes',
   workflowStages: '/workflow/stages',
   workflowStage: (code: string) => `/workflow/stages/${encodeURIComponent(code)}`,
@@ -543,6 +568,8 @@ export const apiClient: ApiClient = {
     request<StageGateDecisionResponse>('POST', apiPaths.workflowReject(id), payload ?? {}),
   getWorkflowStatus: (id: string) =>
     request<WorkflowStatusResponse>('GET', apiPaths.workflowStatus(id)),
+  getMyTasks: (role: string) => request<MyTaskItem[]>('GET', apiPaths.myTasks(role)),
+  getMyTasksAuthenticated: () => request<MyTaskItem[]>('GET', apiPaths.myTasksAuthenticated),
   getWorkflowHistory: (workflowId: string) =>
     request<ApprovalAction[]>('GET', apiPaths.workflowHistory(workflowId)),
   listWorkflowRegimes: () => request<WorkflowRegime[]>('GET', apiPaths.workflowRegimes),

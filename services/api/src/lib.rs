@@ -760,6 +760,8 @@ pub fn app(state: AppState) -> Router {
         .route("/workflow/:id/reject", post(reject_workflow_endpoint))
         .route("/workflow/:id/history", get(workflow_history))
         .route("/workflow/:id/status", get(get_workflow_status))
+        .route("/workflow/my-tasks/:role", get(get_my_tasks))
+        .route("/workflow/my-tasks", get(get_my_tasks_authenticated))
         .route("/parcels/:id", get(get_parcel))
         .route("/users", get(list_users))
         .route("/organizations", get(list_organizations))
@@ -2303,6 +2305,201 @@ async fn get_workflow_status(
         can_advance: missing.is_empty() && !is_terminal,
         recent_actions,
     }))
+}
+
+// ============================================================
+// MY TASKS — per-stakeholder task queue
+// (Master PDF §21, §25 — stakeholder-to-workflow assignment)
+// Returns all workflow instances currently assigned to the given
+// stakeholder role, so each persona sees their own task inbox.
+// ============================================================
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct MyTaskItem {
+    pub workflow_id: Uuid,
+    pub project_id: Uuid,
+    pub project_name: String,
+    pub current_stage: String,
+    pub current_stage_name: String,
+    pub responsible_department: String,
+    pub responsible_role: String,
+    pub approval_authority: String,
+    pub timeline_days: u32,
+    pub deadline_at: Option<DateTime<Utc>>,
+    pub days_remaining: Option<i64>,
+    pub is_overdue: bool,
+    pub required_documents: Vec<String>,
+    pub uploaded_documents: Vec<String>,
+    pub missing_documents: Vec<String>,
+    pub can_advance: bool,
+    pub is_terminal: bool,
+}
+
+/// GET /workflow/my-tasks/:role
+/// Returns all non-terminal workflow instances where the current stage's
+/// responsible_role matches the given role code (e.g. "collector",
+/// "finance_officer", "revenue_officer"). This is the per-stakeholder
+/// task queue — the "My Tasks" inbox that turns the workflow engine
+/// from a static progression into an orchestration platform.
+async fn get_my_tasks(
+    State(state): State<AppState>,
+    Path(role): Path<String>,
+) -> Result<Json<Vec<MyTaskItem>>, ApiError> {
+    let role_code = role.trim().to_lowercase();
+    let mut tasks = Vec::new();
+
+    // Try DB first (source of truth)
+    if let Some(ref pool) = state.pool {
+        use sqlx::Row;
+        // Join workflow_instance with project to get the project name,
+        // and filter by the responsible_role stored on the workflow_instance
+        let rows = sqlx::query(
+            "SELECT wi.id, wi.project_id, wi.current_stage, wi.deadline_at,
+                    p.name as project_name
+             FROM workflow_instance wi
+             JOIN project p ON p.id = wi.project_id
+             WHERE wi.completed_at IS NULL
+               AND wi.lapsed_at IS NULL
+             ORDER BY wi.deadline_at ASC NULLS LAST"
+        )
+        .fetch_all(pool)
+        .await
+        .map_err(|e| ApiError::BadRequest(format!("DB error: {e}")))?;
+
+        for r in rows {
+            let stage_str: String = r.try_get("current_stage").unwrap_or_else(|_| "proposal_initiation".to_string());
+            let current_stage = sih_workflow::db_code_to_stage(&stage_str);
+            let handler = sih_workflow::who_handles_stage(&current_stage);
+
+            // Filter by the requested role
+            if handler.role_code != role_code.as_str() {
+                continue;
+            }
+
+            let workflow_id: Uuid = r.try_get("id").unwrap_or_default();
+            let project_id: Uuid = r.try_get("project_id").unwrap_or_default();
+            let project_name: String = r.try_get("project_name").unwrap_or_else(|_| "Unknown".to_string());
+            let deadline_at: Option<DateTime<Utc>> = r.try_get("deadline_at").ok();
+
+            let now = Utc::now();
+            let days_remaining = deadline_at.map(|d| (d - now).num_days());
+            let is_overdue = days_remaining.map(|d| d < 0).unwrap_or(false);
+
+            // Fetch uploaded documents for this project from the DB
+            let doc_rows = sqlx::query("SELECT file_name FROM document WHERE project_id = $1")
+                .bind(project_id)
+                .fetch_all(pool)
+                .await
+                .unwrap_or_default();
+            let uploaded_docs: Vec<String> = doc_rows
+                .into_iter()
+                .map(|d| d.try_get::<String, _>("file_name").unwrap_or_default())
+                .collect();
+
+            let required_docs: Vec<String> = handler.required_documents.iter().map(|s| s.to_string()).collect();
+            let missing_docs: Vec<String> = required_docs
+                .iter()
+                .filter(|req| !uploaded_docs.iter().any(|u| u.contains(req.as_str()) || u == req.as_str()))
+                .map(|s| s.to_string())
+                .collect();
+
+            let is_terminal = current_stage == ProjectStage::ProjectClosure
+                || current_stage == ProjectStage::Completed
+                || current_stage == ProjectStage::Lapsed;
+
+            tasks.push(MyTaskItem {
+                workflow_id,
+                project_id,
+                project_name,
+                current_stage: stage_str,
+                current_stage_name: sih_workflow::canonical_stage_label(&current_stage).to_string(),
+                responsible_department: handler.department_code.to_string(),
+                responsible_role: handler.role_code.to_string(),
+                approval_authority: handler.approval_authority.to_string(),
+                timeline_days: handler.timeline_days,
+                deadline_at,
+                days_remaining,
+                is_overdue,
+                required_docs,
+                uploaded_documents: uploaded_docs,
+                missing_documents: missing_docs.clone(),
+                can_advance: missing_docs.is_empty() && !is_terminal,
+                is_terminal,
+            });
+        }
+    }
+
+    // Fall back to in-memory if DB is unavailable or returned nothing
+    if tasks.is_empty() {
+        let in_mem = state.in_memory.read().unwrap();
+        let now = Utc::now();
+        for (w_id, instance) in &in_mem.workflows {
+            if instance.completed_at.is_some() || instance.lapsed_at.is_some() {
+                continue;
+            }
+            let handler = sih_workflow::who_handles_stage(&instance.current_stage);
+            if handler.role_code != role_code.as_str() {
+                continue;
+            }
+            let project_name = in_mem.projects
+                .get(&instance.project_id)
+                .map(|p| p.name.clone())
+                .unwrap_or_else(|| "Unknown".to_string());
+
+            let days_remaining = instance.deadline_at.map(|d| (d - now).num_days());
+            let is_overdue = days_remaining.map(|d| d < 0).unwrap_or(false);
+
+            let uploaded_docs: Vec<String> = in_mem.documents
+                .iter()
+                .filter(|d| d.project_id == instance.project_id)
+                .map(|d| d.file_name.clone())
+                .collect();
+
+            let required_docs: Vec<String> = handler.required_documents.iter().map(|s| s.to_string()).collect();
+            let missing_docs: Vec<String> = required_docs
+                .iter()
+                .filter(|req| !uploaded_docs.iter().any(|u| u.contains(req.as_str()) || u == req.as_str()))
+                .map(|s| s.to_string())
+                .collect();
+
+            let is_terminal = instance.current_stage == ProjectStage::ProjectClosure
+                || instance.current_stage == ProjectStage::Completed
+                || instance.current_stage == ProjectStage::Lapsed;
+
+            tasks.push(MyTaskItem {
+                workflow_id: *w_id,
+                project_id: instance.project_id,
+                project_name,
+                current_stage: sih_workflow::stage_to_db_code(instance.current_stage).to_string(),
+                current_stage_name: sih_workflow::canonical_stage_label(&instance.current_stage).to_string(),
+                responsible_department: handler.department_code.to_string(),
+                responsible_role: handler.role_code.to_string(),
+                approval_authority: handler.approval_authority.to_string(),
+                timeline_days: handler.timeline_days,
+                deadline_at: instance.deadline_at,
+                days_remaining,
+                is_overdue,
+                required_docs,
+                uploaded_documents: uploaded_docs,
+                missing_documents: missing_docs.clone(),
+                can_advance: missing_docs.is_empty() && !is_terminal,
+                is_terminal,
+            });
+        }
+    }
+
+    Ok(Json(tasks))
+}
+
+/// GET /workflow/my-tasks
+/// Same as get_my_tasks but uses the authenticated user's role from the
+/// Bearer token. Falls back to "collector" if no auth or role not found.
+async fn get_my_tasks_authenticated(
+    state: State<AppState>,
+    actor: AuthenticatedActor,
+) -> Result<Json<Vec<MyTaskItem>>, ApiError> {
+    let role = actor.role.as_str().to_string();
+    get_my_tasks(state, Path(role)).await
 }
 
 async fn workflow_history(

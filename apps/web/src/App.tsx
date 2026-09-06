@@ -17,6 +17,7 @@ import {
   type AlertNotice,
   type DepositWithAuthorityRecord,
   type OwnershipStatusResponse,
+  type MyTaskItem,
   type ApiProject,
   type Language,
   type Project,
@@ -943,6 +944,52 @@ export default function App() {
   const [departments, setDepartments] = useState<DepartmentInfo[]>([])
   const [ehrmsEmployees, setEhrmsEmployees] = useState<EhrmsEmployee[]>([])
 
+  // My Tasks — per-stakeholder task queue from the workflow engine.
+  // Each persona sees the workflow instances currently assigned to their
+  // role, with deadline countdown, required documents, and overdue flags.
+  const [myTasks, setMyTasks] = useState<MyTaskItem[]>([])
+  const [myTasksLoading, setMyTasksLoading] = useState(false)
+
+  // Map the frontend persona ID to the Rust role_code string used by the
+  // /workflow/my-tasks/:role endpoint. The Rust who_handles_stage() function
+  // returns role_code values like "collector", "revenue_officer", etc.
+  const personaToRoleCode = (personaId: StakeholderId): string => {
+    switch (personaId) {
+      case 'collector': return 'collector'
+      case 'additional_collector': return 'additional_collector'
+      case 'revenue_officer': return 'revenue_officer'
+      case 'gis_surveyor': return 'gis_officer'
+      case 'sia_officer': return 'sia_officer'
+      case 'legal_officer': return 'legal_officer'
+      case 'finance_officer': return 'finance_officer'
+      case 'rehabilitation_officer': return 'rr_officer'
+      case 'land_owner': return 'land_owner'
+      case 'requiring_body': return 'land_requiring_body'
+      case 'government_dashboard': return 'government_reviewer'
+      default: return 'collector'
+    }
+  }
+
+  // Fetch my-tasks whenever the active persona changes
+  useEffect(() => {
+    const roleCode = personaToRoleCode(activePersona.id)
+    setMyTasksLoading(true)
+    apiClient.getMyTasks(roleCode).then((tasks) => {
+      setMyTasks(tasks)
+      setMyTasksLoading(false)
+    }).catch((err) => {
+      console.info('My tasks fetch:', err?.message || err)
+      setMyTasks([])
+      setMyTasksLoading(false)
+    })
+  }, [activePersona.id])
+
+  // Also refresh tasks after a gate approve/reject
+  const refreshMyTasks = () => {
+    const roleCode = personaToRoleCode(activePersona.id)
+    apiClient.getMyTasks(roleCode).then(setMyTasks).catch(() => {})
+  }
+
   // Deposit with Authority (Master PDF §3, migration 007)
   const [deposits, setDeposits] = useState<DepositWithAuthorityRecord[]>([])
   const [showDepositModal, setShowDepositModal] = useState(false)
@@ -1213,6 +1260,7 @@ export default function App() {
       setGateRemarks('')
       handleOpenAudit()
       syncWorkflowStatus(selected.id)
+      refreshMyTasks()
     } catch (err: any) {
       setGateError(formatGateError(err.message || 'Failed to approve gate'))
     } finally {
@@ -1241,6 +1289,7 @@ export default function App() {
       setGateRemarks('')
       handleOpenAudit()
       syncWorkflowStatus(selected.id)
+      refreshMyTasks()
     } catch (err: any) {
       setGateError(formatGateError(err.message || 'Failed to reject gate'))
     } finally {
@@ -2226,6 +2275,113 @@ export default function App() {
                   )}
                 </div>
               </section>
+
+              {/* ====================================================
+                  MY TASKS — per-stakeholder task queue
+                  Shows workflow instances currently assigned to the
+                  active persona's role. This is the "inbox" that turns
+                  the workflow engine from a static progression into
+                  an orchestration platform. Each task shows:
+                  - Project name + current stage
+                  - Deadline countdown (days remaining / overdue)
+                  - Required vs uploaded documents
+                  - Can-advance flag (all docs uploaded?)
+                  - Click to open the gate review modal
+                  ==================================================== */}
+              {myTasks.length > 0 && (
+                <section style={{
+                  background: '#fff',
+                  border: '1px solid #dce2d6',
+                  borderRadius: 8,
+                  padding: '16px 18px',
+                  marginTop: 0,
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                    <div>
+                      <span style={{ font: '700 9px "DM Mono"', color: '#2f6345', letterSpacing: '0.08em' }}>
+                        MY TASKS · {myTasks.length} ASSIGNED
+                      </span>
+                      <h3 style={{ margin: '2px 0 0', fontSize: 15, color: '#10251f' }}>
+                        Pending Statutory Actions for {resolvePersonaName(activePersona)}
+                      </h3>
+                    </div>
+                    <button
+                      className="secondary-button"
+                      style={{ fontSize: 11 }}
+                      onClick={refreshMyTasks}
+                    >
+                      ↻ Refresh
+                    </button>
+                  </div>
+
+                  <div style={{ display: 'grid', gap: 8 }}>
+                    {myTasks.map((task) => (
+                      <div
+                        key={task.workflow_id}
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          padding: '10px 14px',
+                          background: task.is_overdue ? '#fef2f2' : '#f8faf6',
+                          border: task.is_overdue ? '1px solid #fca5a5' : '1px solid #e3e8de',
+                          borderRadius: 6,
+                          cursor: 'pointer',
+                          gap: 12,
+                        }}
+                        onClick={() => {
+                          setSelected(projects.find(p => p.id === task.project_id) || selected)
+                          setShowGateReviewModal(true)
+                        }}
+                      >
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+                            <strong style={{ fontSize: 13, color: '#10251f' }}>{task.project_name}</strong>
+                            <span style={{
+                              font: '10px "DM Mono"',
+                              padding: '2px 6px',
+                              borderRadius: 3,
+                              background: task.can_advance ? '#d1fae5' : '#fef3c7',
+                              color: task.can_advance ? '#065f46' : '#92400e',
+                            }}>
+                              {task.current_stage_name.toUpperCase()}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: 11, color: '#52695c' }}>
+                            {task.missing_documents.length > 0 ? (
+                              <>⚠ Missing {task.missing_documents.length} doc(s): {task.missing_documents.slice(0, 2).map(d => d.replace(/_/g, ' ')).join(', ')}{task.missing_documents.length > 2 ? '...' : ''}</>
+                            ) : (
+                              <>✓ All required documents uploaded — ready to advance</>
+                            )}
+                          </div>
+                        </div>
+                        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                          {task.deadline_at && (
+                            <div style={{
+                              font: '700 12px "DM Mono"',
+                              color: task.is_overdue ? '#dc2626' : (task.days_remaining ?? 0) <= 7 ? '#f59e0b' : '#52695c',
+                            }}>
+                              {task.is_overdue
+                                ? `${Math.abs(task.days_remaining ?? 0)}d OVERDUE`
+                                : `${task.days_remaining}d left`
+                              }
+                            </div>
+                          )}
+                          <div style={{ fontSize: 10, color: '#7a8e83', marginTop: 2 }}>
+                            SLA: {task.timeline_days}d · {task.approval_authority}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {myTasksLoading && (
+                    <div style={{ textAlign: 'center', padding: 8, fontSize: 11, color: '#7a8e83' }}>
+                      Loading tasks...
+                    </div>
+                  )}
+                </section>
+              )}
 
               {/* ====================================================
                   ROLE-SPECIFIC DASHBOARD MODULES (PER SPECIFICATION)

@@ -22,9 +22,9 @@ LandFlow is a national orchestration platform designed for the Smart India Hacka
    - Implements statutory transitions from Proposal Initiation to Project Closure.
    - Enforces 4-layer statutory gate criteria: authorized role validation, mandatory document verification, statutory SLA countdown, and hash-chained audit persistence.
 
-5. **Spatial Boundary Architecture & PostGIS Strategy**:
-   - **Local MVP**: Parcel boundaries are stored as canonical GeoJSON (RFC 7946) inside PostgreSQL `JSONB` columns (`parcel.boundary_geojson`). This allows seamless, cross-platform local development and demo portability across macOS, Linux, and Windows without native C-geospatial library compile locks.
-   - **Production Staging Path**: The database migration pipeline includes PostGIS extension enablement (`CREATE EXTENSION IF NOT EXISTS postgis;`). Production deployments convert the `JSONB` polygons into `geometry(Polygon, 4326)` with spatial GiST indexes for server-side `ST_Intersects`, `ST_DWithin`, and overlap conflict detection.
+5. **Spatial Boundary Architecture & PostGIS**:
+   - PostGIS extension is enabled (migration 006). Parcel boundaries are stored as native `geometry(Polygon, 4326)` with GiST spatial indexes on `parcel.boundary`, `parcel.centroid`, and `project.alignment`.
+   - Supports `ST_Intersects`, `ST_DWithin`, `ST_Contains` for cadastral overlay and spatial conflict detection per Master PDF §37.
 
 ---
 
@@ -33,10 +33,16 @@ LandFlow is a national orchestration platform designed for the Smart India Hacka
 Database migrations and seeds must be executed in the following sequential order:
 1. `db/migrations/001_initial.sql` — Base schemas (`project`, `parcel`, `workflow_instance`, `audit_log`, `document`, `objection`, `affected_family`, `rr_entitlement`)
 2. `db/migrations/002_ehrms_users.sql` — eHRMS user registry and demo employees (`EMP001` - `EMP010`)
-3. `db/migrations/003_stage_definitions.sql` — 15 statutory stage definitions & SLAs
-4. `db/migrations/004_workflow_stage_fk.sql` — Stage foreign key integrity constraints
-5. `db/migrations/005_audit_and_workflow_persistence.sql` — Relaxed audit log and document metadata columns
-6. `db/seeds/demo.sql` — Initial RFCTLARR 2013 corridor project, parcels, baseline families, and initial notifications
+3. `db/migrations/003_legal_workflow_engine.sql` — 15 statutory stage definitions, 10 departments, 11 stakeholder roles
+4. `db/migrations/004_workflow_instance_fk.sql` — Link `workflow_instance.current_stage` to `workflow_stage_definition(stage_code)`
+5. `db/migrations/005_audit_and_workflow_persistence.sql` — Relaxed audit log, approval history, document, and objection columns for all 11 roles
+6. `db/migrations/006_reenable_postgis.sql` — Re-enable PostGIS extension, convert JSONB geometry columns to native `geometry(Polygon/Point, 4326)` with GiST indexes
+7. `db/migrations/007_ownership_status.sql` — `ownership_status` enum (`clear|disputed|untraceable|under_litigation|multiple_claimants`) + `deposit_with_authority` table for Section 77 / 3H(2) escrow sub-flow
+8. `db/migrations/008_process_type_branches.sql` — Seed 3 demo projects for `right_of_user`, `govt_allotment`, `land_pooling` process types
+9. `db/migrations/009_larr_workflow_gates.sql` — Seed 19 LARR workflow_gate rows (15 hard statutory gates + 4 soft advisory gates) for all 14 stage transitions
+10. `db/migrations/010_unify_user_role_mapping.sql` — Expand `role_code` enum to 12 statutory roles, map eHRMS employees to RBAC `user_role_assignment`
+11. `db/seeds/demo.sql` — Initial RFCTLARR 2013 corridor project, parcels, baseline families, and initial notifications
+12. `db/fixtures/workflow.sql` — NH Act workflow_gate seed rows
 
 To apply all migrations and seeds:
 ```bash
