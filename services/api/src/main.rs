@@ -3,10 +3,14 @@ use std::net::SocketAddr;
 
 #[tokio::main]
 async fn main() {
-    let address: SocketAddr = std::env::var("BIND_ADDR")
-        .unwrap_or_else(|_| "127.0.0.1:3000".to_string())
-        .parse()
-        .expect("BIND_ADDR must be a valid socket address");
+    let address: SocketAddr = if let Ok(bind) = std::env::var("BIND_ADDR") {
+        bind.parse().expect("BIND_ADDR must be a valid socket address")
+    } else if let Ok(port_str) = std::env::var("PORT") {
+        let port: u16 = port_str.parse().expect("PORT must be a valid u16");
+        SocketAddr::from(([0, 0, 0, 0], port))
+    } else {
+        "0.0.0.0:3000".parse().expect("valid fallback socket address")
+    };
     
     let secret = std::env::var("SIH_DEV_AUTH_SECRET")
         .unwrap_or_else(|_| "sih-local-demo-secret-change-me".to_string());
