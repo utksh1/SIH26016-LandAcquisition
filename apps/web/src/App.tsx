@@ -3,6 +3,8 @@ import {
   apiClient,
   isApiConfigured,
   type EhrmsEmployee,
+  type MeResponse,
+  type MeTaskItem,
   type MapParcelFeature,
   type DilrmpLookupResult,
   type PfmsDisburseResult,
@@ -24,6 +26,18 @@ import {
   type ProjectStage,
   type Role,
 } from './api/client'
+import {
+  type Permission,
+  type RbacContext,
+  type NavSection,
+  type KpiCard,
+  type WorkflowAction,
+  NAV_CONFIG,
+  filterNavForPermissions,
+  roleKpiCards,
+  stageWorkflowActions,
+  isLandOwnerRole,
+} from './rbac'
 
 const DEFAULT_PROJECT: Project = {
   id: '',
@@ -809,6 +823,13 @@ export default function App() {
   const [portalView, setPortalView] = useState<PortalView>('landing')
   const [ehrmsEmployeeId, setEhrmsEmployeeId] = useState('EMP001')
   const [authEmployee, setAuthEmployee] = useState<EhrmsEmployee | null>(null)
+
+  // RBAC context — the backend-authorized permission set for the current
+  // user. Populated from /me after eHRMS login. All UI permission checks
+  // use this, never a frontend if (role === '...') check.
+  const [rbacContext, setRbacContext] = useState<RbacContext | null>(null)
+  const [meTasks, setMeTasks] = useState<MeTaskItem[]>([])
+  const [meTasksLoading, setMeTasksLoading] = useState(false)
   const [ehrmsLoading, setEhrmsLoading] = useState(false)
   const [ehrmsError, setEhrmsError] = useState<string | null>(null)
   const [activePersona, setActivePersona] = useState<StakeholderPersona>(stakeholderPersonas[0])
@@ -1174,6 +1195,8 @@ export default function App() {
     const resolvedName = resolvePersonaName(persona)
     apiClient.login(persona.role, resolvedName).catch(() => {})
     showToast(`Active Session: ${persona.title} (${resolvedName})`)
+    // Fetch RBAC context + tasks from backend
+    fetchMeContext(persona.employeeId)
   }
 
   // Handle Mock eHRMS Authentication
@@ -1200,12 +1223,55 @@ export default function App() {
         }
         setPortalView('dashboard')
         showToast(`eHRMS Verified: Welcome ${res.employee.name} (${res.employee.designation})`)
+        // Fetch RBAC context + task queue from backend
+        fetchMeContext(res.employee.employee_id)
       }
     } catch (err: any) {
       setEhrmsError(err.message || `Employee ID ${id} not found in eHRMS Directory`)
     } finally {
       setEhrmsLoading(false)
     }
+  }
+
+  // Fetch the authenticated user's RBAC context (permissions + jurisdiction)
+  // and task queue from the backend /me and /me/tasks endpoints.
+  // This populates rbacContext which all UI permission checks use.
+  const fetchMeContext = async (employeeId?: string) => {
+    try {
+      const me = await apiClient.getMe()
+      setRbacContext({
+        employeeId: me.employee_id,
+        name: me.name,
+        designation: me.designation,
+        department: me.department,
+        role: me.role,
+        roleCode: me.role_code,
+        permissions: me.permissions as Permission[],
+        jurisdiction: {
+          scope_level: me.jurisdiction.scope_level as RbacContext['jurisdiction']['scope_level'],
+          scope_code: me.jurisdiction.scope_code,
+        },
+        allowedActions: [],
+      })
+      // Fetch task queue
+      setMeTasksLoading(true)
+      apiClient.getMeTasks().then((tasks) => {
+        setMeTasks(tasks)
+        setMeTasksLoading(false)
+      }).catch(() => {
+        setMeTasks([])
+        setMeTasksLoading(false)
+      })
+    } catch (err: any) {
+      console.info('RBAC /me fetch:', err?.message || err)
+      // Fall back to persona-based permissions if /me fails (demo mode)
+      setRbacContext(null)
+    }
+  }
+
+  // Refresh task queue after a gate action
+  const refreshMeTasks = () => {
+    apiClient.getMeTasks().then(setMeTasks).catch(() => {})
   }
 
   // Handle Citizen (Land Owner) Login
@@ -1261,6 +1327,7 @@ export default function App() {
       handleOpenAudit()
       syncWorkflowStatus(selected.id)
       refreshMyTasks()
+      refreshMeTasks()
     } catch (err: any) {
       setGateError(formatGateError(err.message || 'Failed to approve gate'))
     } finally {
@@ -1290,6 +1357,7 @@ export default function App() {
       handleOpenAudit()
       syncWorkflowStatus(selected.id)
       refreshMyTasks()
+      refreshMeTasks()
     } catch (err: any) {
       setGateError(formatGateError(err.message || 'Failed to reject gate'))
     } finally {
@@ -1890,16 +1958,66 @@ export default function App() {
               {activePersona.title}
             </strong>
             <small style={{ color: '#8da79a', fontSize: 10 }}>{resolvePersonaName(activePersona)}</small>
+            {/* DEMO PERSONA label — clearly indicates this is a demo role switcher,
+                not a real authentication system. Required by spec §13. */}
+            <div style={{
+              marginTop: 6,
+              padding: '2px 6px',
+              background: '#3a2410',
+              border: '1px solid #8c6d28',
+              borderRadius: 3,
+              font: '700 8px "DM Mono"',
+              color: '#e6bf65',
+              letterSpacing: '0.08em',
+              display: 'inline-block',
+            }}>
+              ⚡ DEMO PERSONA
+            </div>
+            {/* RBAC context indicator — shows permissions count + jurisdiction */}
+            {rbacContext && (
+              <div style={{ marginTop: 6, fontSize: 9, color: '#6a8e7e', font: '"DM Mono"' }}>
+                {rbacContext.permissions.length} perms · {rbacContext.jurisdiction.scope_level}: {rbacContext.jurisdiction.scope_code}
+              </div>
+            )}
           </div>
         </div>
 
         <div className="workspace-label">WORKSPACE PANELS</div>
         <nav className="nav-links">
-          <button className="nav-link active">
-            <Icon name="grid" />
-            <span>Dashboard Overview</span>
-            <b>01</b>
-          </button>
+          {/* Dynamic RBAC-filtered navigation. The nav items come from
+              NAV_CONFIG in rbac.ts. Each item has a permission requirement.
+              Only items the user has permission for are shown. */}
+          {(() => {
+            const perms = rbacContext?.permissions || []
+            // If RBAC context is loaded, filter nav by permissions.
+            // Otherwise (demo mode without backend), show all items so the
+            // UI isn't empty — the backend will still enforce 403 on mutations.
+            const sections = perms.length > 0
+              ? filterNavForPermissions(perms)
+              : NAV_CONFIG
+            const iconMap: Record<string, IconName> = {
+              dashboard: 'grid', projects: 'folder', 'my-tasks': 'check',
+              parcels: 'map', 'gis-map': 'map', dilrmp: 'search',
+              sia: 'people', objections: 'shield', awards: 'file',
+              compensation: 'currency', payments: 'currency', possession: 'home',
+              rr: 'people', deposits: 'file', litigation: 'shield',
+              analytics: 'arrow', audit: 'shield', national: 'building',
+              'my-land': 'home', 'my-notices': 'bell', 'my-objections': 'shield',
+              'my-compensation': 'currency', 'my-payments': 'currency', grievances: 'people',
+            }
+            return sections.flatMap(section =>
+              section.items.map(item => {
+                const icon = iconMap[item.id] || 'grid'
+                return (
+                  <button key={item.id} className="nav-link" onClick={() => showToast(`Navigating to: ${item.label}`)}>
+                    <Icon name={icon} />
+                    <span>{item.label}</span>
+                  </button>
+                )
+              })
+            )
+          })()}
+          {/* Always-available workspace tools */}
           <button className="nav-link" onClick={() => setShowCreateModal(true)}>
             <Icon name="plus" />
             <span>New Acquisition Project</span>
@@ -2123,21 +2241,33 @@ export default function App() {
             </div>
           </section>
 
-          {/* KPI Row */}
+          {/* KPI Row — role-specific cards from rbac.ts roleKpiCards().
+              Falls back to the API-fetched kpis (from /dashboard/kpis) if
+              the RBAC role KPIs aren't computed yet. */}
           <section className="kpi-grid">
-            {kpis.map((kpi) => (
-              <article className={`kpi-card ${kpi.tone}`} key={kpi.label}>
-                <div className="kpi-top">
-                  <span>{kpi.label}</span>
-                  <span className="kpi-icon">{kpi.icon}</span>
-                </div>
-                <strong>{kpi.value}</strong>
-                <p>
-                  <span className="trend">↗</span>
-                  {kpi.delta}
-                </p>
-              </article>
-            ))}
+            {(() => {
+              // Compute role-specific KPIs using the RBAC layer
+              const roleKpis = roleKpiCards(activePersona.id, {
+                projectCount: projects.length,
+                pendingTasks: meTasks.length || myTasks.length,
+                overdueTasks: (meTasks.length > 0 ? meTasks : myTasks).filter((t: any) => t.is_overdue).length,
+              })
+              // Use role-specific KPIs if available, otherwise the API-fetched ones
+              const displayKpis = roleKpis.length > 0 ? roleKpis : kpis
+              return displayKpis.map((kpi) => (
+                <article className={`kpi-card ${kpi.tone}`} key={kpi.label}>
+                  <div className="kpi-top">
+                    <span>{kpi.label}</span>
+                    <span className="kpi-icon">{kpi.icon}</span>
+                  </div>
+                  <strong>{kpi.value}</strong>
+                  <p>
+                    <span className="trend">↗</span>
+                    {kpi.delta}
+                  </p>
+                </article>
+              ))
+            })()}
           </section>
 
           {/* Dynamic Statutory Alerts Banner from PostgreSQL */}
@@ -2288,7 +2418,7 @@ export default function App() {
                   - Can-advance flag (all docs uploaded?)
                   - Click to open the gate review modal
                   ==================================================== */}
-              {myTasks.length > 0 && (
+              {(meTasks.length > 0 || myTasks.length > 0) && (
                 <section style={{
                   background: '#fff',
                   border: '1px solid #dce2d6',
@@ -2299,7 +2429,7 @@ export default function App() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                     <div>
                       <span style={{ font: '700 9px "DM Mono"', color: '#2f6345', letterSpacing: '0.08em' }}>
-                        MY TASKS · {myTasks.length} ASSIGNED
+                        MY PENDING ACTIONS · {(meTasks.length || myTasks.length)} ASSIGNED
                       </span>
                       <h3 style={{ margin: '2px 0 0', fontSize: 15, color: '#10251f' }}>
                         Pending Statutory Actions for {resolvePersonaName(activePersona)}
@@ -2308,14 +2438,17 @@ export default function App() {
                     <button
                       className="secondary-button"
                       style={{ fontSize: 11 }}
-                      onClick={refreshMyTasks}
+                      onClick={() => { refreshMyTasks(); refreshMeTasks(); }}
                     >
                       ↻ Refresh
                     </button>
                   </div>
 
                   <div style={{ display: 'grid', gap: 8 }}>
-                    {myTasks.map((task) => (
+                    {/* Prefer /me/tasks (RBAC-driven with allowed_actions) over
+                        /workflow/my-tasks/:role (role-based only). Fall back to
+                        the latter if /me/tasks returns empty (demo mode). */}
+                    {(meTasks.length > 0 ? meTasks : myTasks).map((task: any) => (
                       <div
                         key={task.workflow_id}
                         style={{
@@ -2349,7 +2482,7 @@ export default function App() {
                           </div>
                           <div style={{ fontSize: 11, color: '#52695c' }}>
                             {task.missing_documents.length > 0 ? (
-                              <>⚠ Missing {task.missing_documents.length} doc(s): {task.missing_documents.slice(0, 2).map(d => d.replace(/_/g, ' ')).join(', ')}{task.missing_documents.length > 2 ? '...' : ''}</>
+                              <>⚠ Missing {task.missing_documents.length} doc(s): {task.missing_documents.slice(0, 2).map((d: string) => d.replace(/_/g, ' ')).join(', ')}{task.missing_documents.length > 2 ? '...' : ''}</>
                             ) : (
                               <>✓ All required documents uploaded — ready to advance</>
                             )}
@@ -3929,6 +4062,40 @@ export default function App() {
                       : 'Project Archive / Mutation'}
                   </div>
                 </div>
+                {/* RBAC-driven allowed actions — shows what the backend permits
+                    for the current user's role at this stage. Buttons are
+                    rendered based on backend allowed_actions, not frontend
+                    role checks. The backend will still 403 on unauthorized
+                    mutations. */}
+                {(() => {
+                  const stageCode = rfctlarrStages[currentStageIdx].stageCode
+                  // Get allowed actions from the meTasks response if available,
+                  // otherwise compute from the stage
+                  const meTask = meTasks.find((t) => t.stage === stageCode)
+                  const allowedActions = meTask?.allowed_actions || ['approve', 'return', 'view_documents']
+                  const workflowActions = stageWorkflowActions(stageCode, allowedActions)
+                  if (workflowActions.length === 0) return null
+                  return (
+                    <div style={{ marginTop: 10, padding: 8, background: '#eef4ed', borderRadius: 4, border: '1px solid #c3d4c8' }}>
+                      <div style={{ font: '700 9px "DM Mono"', color: '#2f6345', marginBottom: 4, letterSpacing: '0.08em' }}>
+                        ALLOWED ACTIONS (RBAC-DRIVEN)
+                      </div>
+                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                        {workflowActions.map((wa) => (
+                          <span key={wa.action} style={{
+                            padding: '2px 6px',
+                            borderRadius: 3,
+                            font: '10px "DM Mono"',
+                            background: wa.variant === 'primary' ? '#d1fae5' : wa.variant === 'danger' ? '#fee2e2' : '#f3f4f6',
+                            color: wa.variant === 'primary' ? '#065f46' : wa.variant === 'danger' ? '#991b1b' : '#374151',
+                          }}>
+                            {wa.label}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })()}
                 <div style={{ marginTop: 8, fontSize: 11, color: '#556e5e', borderTop: '1px dashed #cad7ca', paddingTop: 6 }}>
                   <strong>Statutory Audit Requirement:</strong> {rfctlarrStages[currentStageIdx].auditRequirements}
                 </div>

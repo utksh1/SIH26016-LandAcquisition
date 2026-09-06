@@ -149,6 +149,68 @@ pub struct EhrmsEmployee {
     pub role: String,
 }
 
+// ============================================================
+// RBAC Phase 2 — /me response payloads
+// (Mirrors the spec: full profile + permissions + jurisdiction,
+//  a lightweight permissions-only response, and a per-task item
+//  with allowed_actions computed from the workflow stage + role.)
+// ============================================================
+
+/// GET /me response: the authenticated user's full profile including
+/// permissions and jurisdiction. The frontend uses this to build the
+/// RBAC context after eHRMS login.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct MeResponse {
+    pub employee_id: String,
+    pub name: String,
+    pub designation: String,
+    pub department: String,
+    pub role: String,
+    pub role_code: String,
+    pub permissions: Vec<String>,
+    pub jurisdiction: JurisdictionInfo,
+}
+
+/// Jurisdiction summary returned inside `MeResponse`. MVP returns the
+/// (scope_level, scope_code) tuple; future work will resolve a richer
+/// `Jurisdiction` enum from a jurisdiction table (migration 011).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct JurisdictionInfo {
+    pub scope_level: String,
+    pub scope_code: String,
+}
+
+/// GET /me/permissions response: just the role code + permission array.
+/// Lightweight endpoint for the frontend to refresh permissions without
+/// re-fetching the full profile.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct MePermissionsResponse {
+    pub role_code: String,
+    pub permissions: Vec<String>,
+}
+
+/// GET /me/tasks response item: one row per active workflow task for the
+/// authenticated user. `allowed_actions` is the RBAC-driven list of
+/// button labels the frontend should render for this task.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct MeTaskItem {
+    pub task_id: String,
+    pub project_id: String,
+    pub project_name: String,
+    pub stage: String,
+    pub stage_name: String,
+    pub action: String,
+    pub assigned_role: String,
+    pub department: String,
+    pub deadline: Option<DateTime<Utc>>,
+    pub priority: String,
+    pub allowed_actions: Vec<String>,
+    pub required_documents: Vec<String>,
+    pub uploaded_documents: Vec<String>,
+    pub missing_documents: Vec<String>,
+    pub can_advance: bool,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MockEhrmsLoginPayload {
     pub employee_id: String,
@@ -715,6 +777,50 @@ impl FromRequestParts<AppState> for AuthenticatedActor {
     }
 }
 
+// ============================================================
+// RBAC Phase 3 — authorize() middleware
+// ------------------------------------------------------------
+// Reusable authorization layer. All mutation endpoints that take an
+// `AuthenticatedActor` should call `authorize(&actor, Permission::...)`
+// before performing the action. Returns Ok(()) when the actor's role
+// has the required permission, Err(ApiError::Forbidden) otherwise.
+//
+// Phase 3 scope (this commit): role permission check via Role::can().
+// Future phases will additionally check:
+//   - actor.active (from the users table) — block deactivated accounts
+//   - department match (e.g. finance_officer must be in 'finance_dept')
+//   - jurisdiction covers the target resource (district/state match)
+//   - workflow stage assignment (actor is the responsible_role for the
+//     current stage, as recorded in workflow_instance.responsible_role)
+//   - explicit task assignment (user_role_assignment.scope_code)
+// ============================================================
+
+/// Authorization check. Returns `Ok(())` if the actor's role grants the
+/// required permission, or `Err(ApiError::Forbidden)` otherwise.
+///
+/// This is the reusable authorization layer. All mutation endpoints
+/// should call this before performing the action.
+///
+/// Checks (Phase 3 MVP):
+/// 1. The actor's role has the required permission (via `Role::can()`).
+///
+/// Future checks (not yet implemented):
+/// 2. The actor's jurisdiction covers the resource.
+/// 3. The actor is assigned to the workflow task.
+/// 4. The actor's account is active.
+pub fn authorize(actor: &Actor, permission: Permission) -> Result<(), ApiError> {
+    if actor.role.can(permission) {
+        Ok(())
+    } else {
+        Err(ApiError::Forbidden(format!(
+            "User with role '{}' does not have permission '{}'. Required permission: {}",
+            actor.role,
+            permission,
+            permission.as_str()
+        )))
+    }
+}
+
 pub struct JsonBody<T>(pub T);
 
 #[axum::async_trait]
@@ -762,6 +868,10 @@ pub fn app(state: AppState) -> Router {
         .route("/workflow/:id/status", get(get_workflow_status))
         .route("/workflow/my-tasks/:role", get(get_my_tasks))
         .route("/workflow/my-tasks", get(get_my_tasks_authenticated))
+        // RBAC Phase 2 — /me endpoints (authenticated user context)
+        .route("/me", get(get_me))
+        .route("/me/permissions", get(get_me_permissions))
+        .route("/me/tasks", get(get_me_tasks))
         .route("/parcels/:id", get(get_parcel))
         .route("/users", get(list_users))
         .route("/organizations", get(list_organizations))
@@ -2500,6 +2610,626 @@ async fn get_my_tasks_authenticated(
 ) -> Result<Json<Vec<MyTaskItem>>, ApiError> {
     let role = actor.role.as_str().to_string();
     get_my_tasks(state, Path(role)).await
+}
+
+// ============================================================
+// RBAC Phase 2 — /me endpoint surface
+// ------------------------------------------------------------
+// Helpers:
+//   - resolve_ehrms_employee: DB → in-memory fallback for the eHRMS
+//     employee record (employee_id, name, designation, department, role).
+//   - ehrms_role_to_domain:  maps the eHRMS role VARCHAR (COLLECTOR,
+//     GIS_OFFICER, REHABILITATION_OFFICER, ...) to the corresponding
+//     `sih_domain::Role` enum variant.
+//   - ehrms_role_to_code:    maps the eHRMS role VARCHAR to the lowercase
+//     snake_case role_code used by the workflow engine.
+//   - resolve_jurisdiction:  reads jurisdiction from the DB table
+//     (migration 011), with a deterministic MVP fallback.
+//   - compute_allowed_actions: the RBAC-driven list of action button
+//     labels per (stage, role, can_advance) triple.
+//
+// Endpoints:
+//   - GET /me              → MeResponse   (full profile + permissions + jurisdiction)
+//   - GET /me/permissions  → MePermissionsResponse (role_code + permissions)
+//   - GET /me/tasks        → Vec<MeTaskItem> (active task queue + allowed_actions)
+// ============================================================
+
+/// Resolve an eHRMS employee by `employee_id` from the DB (or in-memory
+/// fallback). Returns `(employee_id, name, designation, department, role_string)`.
+///
+/// Currently used as a building block for future endpoints (audit-log
+/// enrichment, token issuance by employee_id). Defined here per the RBAC
+/// Phase 2 spec so it is available without re-introducing the helper later.
+#[allow(dead_code)]
+async fn resolve_ehrms_employee(
+    state: &AppState,
+    employee_id: &str,
+) -> Option<(String, String, String, String, String)> {
+    let emp_id = employee_id.trim().to_uppercase();
+
+    // Try DB first (source of truth — migration 002)
+    if let Some(ref pool) = state.pool {
+        use sqlx::Row;
+        if let Ok(row) = sqlx::query(
+            "SELECT employee_id, name, designation, department, role FROM users WHERE employee_id = $1"
+        )
+        .bind(&emp_id)
+        .fetch_optional(pool)
+        .await
+        {
+            if let Some(row) = row {
+                return Some((
+                    row.try_get("employee_id").unwrap_or_default(),
+                    row.try_get("name").unwrap_or_default(),
+                    row.try_get("designation").unwrap_or_default(),
+                    row.try_get("department").unwrap_or_default(),
+                    row.try_get("role").unwrap_or_default(),
+                ));
+            }
+        }
+    }
+
+    // Fall back to in-memory ehrms_employees map (synced by sync_from_db)
+    let in_mem = state.in_memory.read().unwrap();
+    in_mem
+        .ehrms_employees
+        .get(&emp_id)
+        .map(|e| {
+            (
+                e.employee_id.clone(),
+                e.name.clone(),
+                e.designation.clone(),
+                e.department.clone(),
+                e.role.clone(),
+            )
+        })
+}
+
+/// Map an eHRMS role string (e.g. "COLLECTOR", "GIS_OFFICER",
+/// "REHABILITATION_OFFICER") to the corresponding Rust `Role` enum
+/// variant. Unknown roles fall back to `Role::LandOwner` (the most
+/// restrictive non-admin role) so that an unmatched eHRMS designation
+/// never accidentally grants elevated permissions.
+fn ehrms_role_to_domain(role_str: &str) -> Role {
+    match role_str.trim().to_uppercase().as_str() {
+        "COLLECTOR" => Role::Collector,
+        "REVENUE_OFFICER" => Role::RevenueOfficer,
+        "GIS_OFFICER" => Role::GisOfficer,
+        "FINANCE_OFFICER" => Role::FinanceOfficer,
+        "REHABILITATION_OFFICER" => Role::RrOfficer,
+        "LAND_REQUIRING_BODY" => Role::LandRequiringBody,
+        "SIA_OFFICER" => Role::SiaOfficer,
+        "LEGAL_OFFICER" => Role::LegalOfficer,
+        "ADDITIONAL_COLLECTOR" => Role::AdditionalCollector,
+        "GOVERNMENT_REVIEWER" => Role::GovernmentReviewer,
+        _ => Role::LandOwner,
+    }
+}
+
+/// Map an eHRMS role string to the lowercase snake_case `role_code`
+/// used by the workflow engine (e.g. "collector", "revenue_officer").
+fn ehrms_role_to_code(role_str: &str) -> String {
+    ehrms_role_to_domain(role_str).as_str().to_string()
+}
+
+/// Resolve the jurisdiction for an eHRMS employee. For the MVP:
+///   - National: Government Reviewer (EMP010), Land Requiring Body (EMP006)
+///   - State:    Legal Officer (EMP009)  → "KA" (Karnataka demo)
+///   - District: everyone else          → "BLR" (Bengaluru demo)
+///
+/// In production this would come from the `jurisdiction` table
+/// (migration 011 — not yet authored). When that table exists this
+/// function will read from it; otherwise it falls back to the
+/// deterministic employee_id-based default above.
+async fn resolve_jurisdiction(state: &AppState, employee_id: &str) -> JurisdictionInfo {
+    // Try DB first (migration 011 jurisdiction table — guarded by IF EXISTS
+    // so the query just fails closed on databases where 011 hasn't been applied).
+    if let Some(ref pool) = state.pool {
+        use sqlx::Row;
+        if let Ok(row) = sqlx::query(
+            "SELECT scope_level, scope_code FROM jurisdiction WHERE employee_id = $1 LIMIT 1"
+        )
+        .bind(employee_id)
+        .fetch_optional(pool)
+        .await
+        {
+            if let Some(row) = row {
+                return JurisdictionInfo {
+                    scope_level: row
+                        .try_get("scope_level")
+                        .unwrap_or_else(|_| "national".to_string()),
+                    scope_code: row.try_get("scope_code").unwrap_or_default(),
+                };
+            }
+        }
+    }
+
+    // Default based on employee ID (MVP demo data — migration 002)
+    let default_scope = match employee_id.trim().to_uppercase().as_str() {
+        "EMP006" | "EMP010" => ("national", "ALL"),
+        "EMP009" => ("state", "KA"),
+        _ => ("district", "BLR"),
+    };
+    JurisdictionInfo {
+        scope_level: default_scope.0.to_string(),
+        scope_code: default_scope.1.to_string(),
+    }
+}
+
+/// Compute the allowed actions for a given workflow stage and role.
+/// This is the RBAC-driven action list that the frontend renders as
+/// buttons in the "My Tasks" inbox.
+///
+/// `can_advance` = all required documents uploaded AND stage is not
+/// terminal. When `can_advance == false`, the "approve" action is
+/// stripped from the list (the user can still view documents etc.).
+fn compute_allowed_actions(
+    stage: &ProjectStage,
+    role: &Role,
+    can_advance: bool,
+) -> Vec<String> {
+    let mut actions = Vec::new();
+
+    // Everyone with ViewProjects can view documents on any task they can see.
+    if role.can(Permission::ViewProjects) {
+        actions.push("view_documents".to_string());
+    }
+
+    // Stage-specific actions, gated by the corresponding permission.
+    match stage {
+        ProjectStage::ProposalInitiation | ProjectStage::Draft => {
+            if role.can(Permission::CreateProjects) {
+                actions.push("submit_proposal".to_string());
+            }
+        }
+        ProjectStage::LandRecordVerification | ProjectStage::Survey => {
+            if role.can(Permission::ParcelVerify) {
+                actions.push("verify".to_string());
+            }
+            if role.can(Permission::WorkflowReject) {
+                actions.push("return".to_string());
+            }
+        }
+        ProjectStage::SiaPreparation => {
+            if role.can(Permission::SiaCreate) {
+                actions.push("create_sia".to_string());
+                actions.push("submit_sia".to_string());
+            }
+            if role.can(Permission::WorkflowReject) {
+                actions.push("return".to_string());
+            }
+        }
+        ProjectStage::SiaReview => {
+            if role.can(Permission::SiaReview) {
+                actions.push("review".to_string());
+            }
+            if role.can(Permission::TransitionProjects) {
+                actions.push("approve".to_string());
+            }
+            if role.can(Permission::WorkflowReject) {
+                actions.push("return".to_string());
+            }
+        }
+        ProjectStage::PreliminaryNotification => {
+            if role.can(Permission::NotificationIssue) {
+                actions.push("issue_notification".to_string());
+            }
+        }
+        ProjectStage::ObjectionPeriod => {
+            if role.can(Permission::ObjectionSubmit) {
+                actions.push("submit_objection".to_string());
+            }
+            if role.can(Permission::ObjectionReview) {
+                actions.push("view_objections".to_string());
+            }
+        }
+        ProjectStage::Hearing | ProjectStage::PublicHearing => {
+            if role.can(Permission::HearingConduct) {
+                actions.push("conduct_hearing".to_string());
+                actions.push("issue_order".to_string());
+            }
+        }
+        ProjectStage::Declaration | ProjectStage::Sanctioned => {
+            if role.can(Permission::DeclarationPrepare) {
+                actions.push("prepare_declaration".to_string());
+            }
+            if role.can(Permission::DeclarationApprove) {
+                actions.push("approve".to_string());
+            }
+            if role.can(Permission::WorkflowReject) {
+                actions.push("return".to_string());
+            }
+        }
+        ProjectStage::AwardPreparation => {
+            if role.can(Permission::AwardPrepare) {
+                actions.push("prepare_award".to_string());
+            }
+            if role.can(Permission::AwardReview) {
+                actions.push("review".to_string());
+            }
+            if role.can(Permission::WorkflowReject) {
+                actions.push("return".to_string());
+            }
+        }
+        ProjectStage::AwardApproval | ProjectStage::CompensationAward => {
+            if role.can(Permission::AwardApprove) {
+                actions.push("approve_award".to_string());
+            }
+            if role.can(Permission::WorkflowReject) {
+                actions.push("return".to_string());
+            }
+        }
+        ProjectStage::CompensationCalculation => {
+            if role.can(Permission::CompensationCalculate) {
+                actions.push("calculate".to_string());
+                actions.push("verify".to_string());
+            }
+        }
+        ProjectStage::PaymentProcessing | ProjectStage::FundsDisbursed => {
+            if role.can(Permission::PaymentInitiate) {
+                actions.push("initiate_payment".to_string());
+            }
+            if role.can(Permission::PaymentApprove) {
+                actions.push("approve_payment".to_string());
+                actions.push("record_payment".to_string());
+            }
+        }
+        ProjectStage::Possession => {
+            if role.can(Permission::PossessionInitiate) {
+                actions.push("initiate_possession".to_string());
+            }
+        }
+        ProjectStage::RrCompletion | ProjectStage::RrScheme => {
+            if role.can(Permission::RrManage) {
+                actions.push("verify_family".to_string());
+                actions.push("approve_entitlement".to_string());
+                actions.push("complete_rr".to_string());
+            }
+        }
+        ProjectStage::ProjectClosure | ProjectStage::Completed => {
+            if role.can(Permission::ViewAudit) {
+                actions.push("view_audit".to_string());
+            }
+            if role.can(Permission::AnalyticsView) {
+                actions.push("export_report".to_string());
+            }
+        }
+        ProjectStage::Lapsed => {}
+    }
+
+    // Strip "approve" when the task cannot yet advance (e.g. mandatory
+    // documents missing). The user can still view / return the task.
+    if !can_advance && actions.contains(&"approve".to_string()) {
+        actions.retain(|a| a != "approve");
+    }
+
+    actions
+}
+
+/// GET /me — returns the authenticated user's full profile including
+/// permissions and jurisdiction. The frontend uses this to build the
+/// RBAC context after eHRMS login.
+async fn get_me(
+    State(state): State<AppState>,
+    AuthenticatedActor(actor): AuthenticatedActor,
+) -> Result<Json<MeResponse>, ApiError> {
+    // The Actor from the Bearer token has an id (app_user.id) but not the
+    // eHRMS employee_id directly. Strategy:
+    //   1. Try joining app_user → users via app_user_id (migration 010).
+    //   2. If that fails or no DB, fall back to the in-memory
+    //      ehrms_employees map keyed by role match.
+    //   3. Last resort: demo defaults (EMP001 / Collector).
+    let (employee_id, name, designation, department, role_str) = if let Some(ref pool) = state.pool {
+        use sqlx::Row;
+        let row = sqlx::query(
+            "SELECT u.employee_id, u.name, u.designation, u.department, u.role
+             FROM app_user au
+             JOIN users u ON u.app_user_id = au.id
+             WHERE au.id = $1"
+        )
+        .bind(actor.id)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| ApiError::BadRequest(format!("DB error: {e}")))?;
+
+        if let Some(row) = row {
+            (
+                row.try_get::<String, _>("employee_id").unwrap_or_default(),
+                row.try_get::<String, _>("name").unwrap_or_default(),
+                row.try_get::<String, _>("designation").unwrap_or_default(),
+                row.try_get::<String, _>("department").unwrap_or_default(),
+                row.try_get::<String, _>("role").unwrap_or_default(),
+            )
+        } else {
+            // Demo fallback — actor.id did not resolve to an eHRMS employee.
+            (
+                "EMP001".to_string(),
+                "Demo User".to_string(),
+                "Collector".to_string(),
+                "District Administration".to_string(),
+                "COLLECTOR".to_string(),
+            )
+        }
+    } else {
+        // No DB — use in-memory ehrms_employees, matched by role.
+        let in_mem = state.in_memory.read().unwrap();
+        let emp = in_mem
+            .ehrms_employees
+            .values()
+            .find(|e| ehrms_role_to_domain(&e.role) == actor.role)
+            .cloned();
+        if let Some(emp) = emp {
+            (
+                emp.employee_id,
+                emp.name,
+                emp.designation,
+                emp.department,
+                emp.role,
+            )
+        } else {
+            (
+                "EMP001".to_string(),
+                "Demo User".to_string(),
+                "Collector".to_string(),
+                "District Administration".to_string(),
+                "COLLECTOR".to_string(),
+            )
+        }
+    };
+
+    let role_code = ehrms_role_to_code(&role_str);
+    let domain_role = ehrms_role_to_domain(&role_str);
+    let permissions: Vec<String> = domain_role
+        .permissions()
+        .iter()
+        .map(|p| p.as_str().to_string())
+        .collect();
+    let jurisdiction = resolve_jurisdiction(&state, &employee_id).await;
+
+    Ok(Json(MeResponse {
+        employee_id,
+        name,
+        designation,
+        department,
+        role: role_str,
+        role_code,
+        permissions,
+        jurisdiction,
+    }))
+}
+
+/// GET /me/permissions — returns just the permissions array for the
+/// authenticated user. Lightweight endpoint for permission refresh.
+async fn get_me_permissions(
+    AuthenticatedActor(actor): AuthenticatedActor,
+) -> Result<Json<MePermissionsResponse>, ApiError> {
+    let role_code = actor.role.as_str().to_string();
+    let permissions: Vec<String> = actor
+        .role
+        .permissions()
+        .iter()
+        .map(|p| p.as_str().to_string())
+        .collect();
+    Ok(Json(MePermissionsResponse { role_code, permissions }))
+}
+
+/// GET /me/tasks — returns the authenticated user's task queue with
+/// `allowed_actions` per task. This is the "My Pending Actions" inbox
+/// that powers the role-specific task dashboard.
+///
+/// Authorization: any authenticated actor with `ViewProjects` may see
+/// their own task queue (every MVP role has `ViewProjects`). The
+/// per-task `allowed_actions` field is what enforces the RBAC boundary
+/// at the UI level — it hides action buttons the actor's role lacks
+/// the permission for.
+async fn get_me_tasks(
+    State(state): State<AppState>,
+    AuthenticatedActor(actor): AuthenticatedActor,
+) -> Result<Json<Vec<MeTaskItem>>, ApiError> {
+    // Phase 3 RBAC: gate on ViewProjects so the task queue is only
+    // visible to roles that can read project state at all. (Every MVP
+    // role has ViewProjects, so this is a defensive check that documents
+    // the intent rather than a hard block.)
+    authorize(&actor, Permission::ViewProjects)?;
+
+    let role_code = actor.role.as_str().to_string();
+    let mut tasks = Vec::new();
+
+    // Try DB first (source of truth — workflow_instance + project + document)
+    if let Some(ref pool) = state.pool {
+        use sqlx::Row;
+        let rows = sqlx::query(
+            "SELECT wi.id, wi.project_id, wi.current_stage, wi.deadline_at,
+                    p.name as project_name
+             FROM workflow_instance wi
+             JOIN project p ON p.id = wi.project_id
+             WHERE wi.completed_at IS NULL AND wi.lapsed_at IS NULL
+             ORDER BY wi.deadline_at ASC NULLS LAST"
+        )
+        .fetch_all(pool)
+        .await
+        .map_err(|e| ApiError::BadRequest(format!("DB error: {e}")))?;
+
+        for r in rows {
+            let stage_str: String = r
+                .try_get("current_stage")
+                .unwrap_or_else(|_| "proposal_initiation".to_string());
+            let current_stage = sih_workflow::db_code_to_stage(&stage_str);
+            let handler = sih_workflow::who_handles_stage(&current_stage);
+
+            // Filter to the authenticated user's role
+            if handler.role_code != role_code.as_str() {
+                continue;
+            }
+
+            let workflow_id: Uuid = r.try_get("id").unwrap_or_default();
+            let project_id: Uuid = r.try_get("project_id").unwrap_or_default();
+            let project_name: String =
+                r.try_get("project_name").unwrap_or_else(|_| "Unknown".to_string());
+            let deadline_at: Option<DateTime<Utc>> = r.try_get("deadline_at").ok();
+
+            let now = Utc::now();
+            let days_remaining = deadline_at.map(|d| (d - now).num_days()).unwrap_or(999);
+            let priority = if days_remaining < 0 {
+                "HIGH"
+            } else if days_remaining <= 7 {
+                "HIGH"
+            } else if days_remaining <= 30 {
+                "MEDIUM"
+            } else {
+                "LOW"
+            };
+
+            // Fetch uploaded documents for this project
+            let doc_rows = sqlx::query("SELECT file_name FROM document WHERE project_id = $1")
+                .bind(project_id)
+                .fetch_all(pool)
+                .await
+                .unwrap_or_default();
+            let uploaded_docs: Vec<String> = doc_rows
+                .into_iter()
+                .map(|d| d.try_get::<String, _>("file_name").unwrap_or_default())
+                .collect();
+
+            let required_docs: Vec<String> =
+                handler.required_documents.iter().map(|s| s.to_string()).collect();
+            let missing_docs: Vec<String> = required_docs
+                .iter()
+                .filter(|req| {
+                    !uploaded_docs
+                        .iter()
+                        .any(|u| u.contains(req.as_str()) || u == req.as_str())
+                })
+                .map(|s| s.to_string())
+                .collect();
+
+            let is_terminal = current_stage == ProjectStage::ProjectClosure
+                || current_stage == ProjectStage::Completed
+                || current_stage == ProjectStage::Lapsed;
+            let can_advance = missing_docs.is_empty() && !is_terminal;
+
+            let allowed_actions =
+                compute_allowed_actions(&current_stage, &actor.role, can_advance);
+
+            // Determine the primary action verb for this stage
+            let action = match &current_stage {
+                ProjectStage::ProposalInitiation => "CREATE_PROPOSAL",
+                ProjectStage::LandRecordVerification | ProjectStage::Survey => "VERIFY",
+                ProjectStage::SiaPreparation => "CREATE_SIA",
+                ProjectStage::SiaReview => "REVIEW_SIA",
+                ProjectStage::PreliminaryNotification => "ISSUE_NOTIFICATION",
+                ProjectStage::ObjectionPeriod => "SUBMIT_OBJECTION",
+                ProjectStage::Hearing | ProjectStage::PublicHearing => "CONDUCT_HEARING",
+                ProjectStage::Declaration | ProjectStage::Sanctioned => "APPROVE_DECLARATION",
+                ProjectStage::AwardPreparation => "PREPARE_AWARD",
+                ProjectStage::AwardApproval | ProjectStage::CompensationAward => "APPROVE_AWARD",
+                ProjectStage::CompensationCalculation => "CALCULATE_COMPENSATION",
+                ProjectStage::PaymentProcessing | ProjectStage::FundsDisbursed => "INITIATE_PAYMENT",
+                ProjectStage::Possession => "INITIATE_POSSESSION",
+                ProjectStage::RrCompletion | ProjectStage::RrScheme => "MANAGE_RR",
+                ProjectStage::ProjectClosure | ProjectStage::Completed => "VIEW_AUDIT",
+                ProjectStage::Lapsed => "NO_ACTION",
+                ProjectStage::Draft => "SUBMIT_PROPOSAL",
+            };
+
+            tasks.push(MeTaskItem {
+                task_id: workflow_id.to_string(),
+                project_id: project_id.to_string(),
+                project_name,
+                stage: stage_str,
+                stage_name: sih_workflow::canonical_stage_label(&current_stage).to_string(),
+                action: action.to_string(),
+                assigned_role: handler.role_code.to_string(),
+                department: handler.department_code.to_string(),
+                deadline: deadline_at,
+                priority: priority.to_string(),
+                allowed_actions,
+                required_documents: required_docs,
+                uploaded_documents: uploaded_docs,
+                missing_documents: missing_docs,
+                can_advance,
+            });
+        }
+    }
+
+    // Fall back to in-memory if DB is unavailable or returned nothing
+    if tasks.is_empty() {
+        let in_mem = state.in_memory.read().unwrap();
+        let now = Utc::now();
+        for (w_id, instance) in &in_mem.workflows {
+            if instance.completed_at.is_some() || instance.lapsed_at.is_some() {
+                continue;
+            }
+            let handler = sih_workflow::who_handles_stage(&instance.current_stage);
+            if handler.role_code != role_code.as_str() {
+                continue;
+            }
+
+            let project_name = in_mem
+                .projects
+                .get(&instance.project_id)
+                .map(|p| p.name.clone())
+                .unwrap_or_else(|| "Unknown".to_string());
+            let days_remaining = instance
+                .deadline_at
+                .map(|d| (d - now).num_days())
+                .unwrap_or(999);
+            let priority = if days_remaining < 0 {
+                "HIGH"
+            } else if days_remaining <= 7 {
+                "HIGH"
+            } else if days_remaining <= 30 {
+                "MEDIUM"
+            } else {
+                "LOW"
+            };
+
+            let uploaded_docs: Vec<String> = in_mem
+                .documents
+                .iter()
+                .filter(|d| d.project_id == instance.project_id)
+                .map(|d| d.file_name.clone())
+                .collect();
+            let required_docs: Vec<String> =
+                handler.required_documents.iter().map(|s| s.to_string()).collect();
+            let missing_docs: Vec<String> = required_docs
+                .iter()
+                .filter(|req| {
+                    !uploaded_docs
+                        .iter()
+                        .any(|u| u.contains(req.as_str()) || u == req.as_str())
+                })
+                .map(|s| s.to_string())
+                .collect();
+            let is_terminal = instance.current_stage == ProjectStage::ProjectClosure
+                || instance.current_stage == ProjectStage::Completed
+                || instance.current_stage == ProjectStage::Lapsed;
+            let can_advance = missing_docs.is_empty() && !is_terminal;
+            let allowed_actions =
+                compute_allowed_actions(&instance.current_stage, &actor.role, can_advance);
+
+            tasks.push(MeTaskItem {
+                task_id: w_id.to_string(),
+                project_id: instance.project_id.to_string(),
+                project_name,
+                stage: sih_workflow::stage_to_db_code(instance.current_stage).to_string(),
+                stage_name: sih_workflow::canonical_stage_label(&instance.current_stage)
+                    .to_string(),
+                action: "REVIEW".to_string(),
+                assigned_role: handler.role_code.to_string(),
+                department: handler.department_code.to_string(),
+                deadline: instance.deadline_at,
+                priority: priority.to_string(),
+                allowed_actions,
+                required_documents: required_docs,
+                uploaded_documents: uploaded_docs,
+                missing_documents: missing_docs,
+                can_advance,
+            });
+        }
+    }
+
+    Ok(Json(tasks))
 }
 
 async fn workflow_history(

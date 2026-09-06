@@ -147,6 +147,73 @@ pub enum Permission {
     UpdateStakeholders,
     ViewAudit,
     SubmitGrievances,
+    // ---------------------------------------------------------------
+    // RBAC Phase 2 additions — stage-specific action permissions used
+    // by /me/tasks `allowed_actions` and the `authorize()` middleware
+    // in services/api. Each maps to a concrete RFCTLARR Act 2013 action
+    // surfaced as a button in the frontend "My Tasks" inbox.
+    // ---------------------------------------------------------------
+    /// Verify parcels / land records (LandRecordVerification, Survey).
+    ParcelVerify,
+    /// Reject / return a workflow to the previous stage.
+    WorkflowReject,
+    /// Create a Social Impact Assessment report (SiaPreparation).
+    SiaCreate,
+    /// Review a Social Impact Assessment report (SiaReview).
+    SiaReview,
+    /// Issue the preliminary notification under Section 11.
+    NotificationIssue,
+    /// Submit an objection during the objection period (Section 15).
+    ObjectionSubmit,
+    /// Review objections received during the objection period.
+    ObjectionReview,
+    /// Conduct a public hearing under Section 15B / 16.
+    HearingConduct,
+    /// Prepare the declaration under Section 19.
+    DeclarationPrepare,
+    /// Approve / sign the Section 19 declaration.
+    DeclarationApprove,
+    /// Prepare the compensation award under Section 23.
+    AwardPrepare,
+    /// Review the draft compensation award.
+    AwardReview,
+    /// Approve the final compensation award.
+    AwardApprove,
+    /// Calculate compensation solatium / interest (CompensationCalculation).
+    CompensationCalculate,
+    /// Initiate a payment via PFMS (PaymentProcessing).
+    PaymentInitiate,
+    /// Approve / release a payment (PaymentProcessing, FundsDisbursed).
+    PaymentApprove,
+    /// Initiate possession handover under Section 38 (Possession).
+    PossessionInitiate,
+    /// Manage R&R entitlements / family verification (RrCompletion, RrScheme).
+    RrManage,
+    /// View analytics dashboards / export reports (terminal stages).
+    AnalyticsView,
+    // ---------------------------------------------------------------
+    // Phase 1 RBAC expansion (cont.): document gate, escrow deposits,
+    // litigation, parcel geometry editing, national dashboard, and the
+    // baseline dashboard permission granted to every authenticated role.
+    // ---------------------------------------------------------------
+    /// parcel.geometry.edit — GIS Officer edits parcel boundary geometry.
+    ParcelGeometryEdit,
+    /// document.upload — Any authenticated role may upload supporting docs.
+    DocumentUpload,
+    /// document.review — Legal Officer / Collector reviews uploaded doc.
+    DocumentReview,
+    /// document.approve — Collector approves document gate at stage transition.
+    DocumentApprove,
+    /// national.dashboard.view — Government Reviewer views national dashboard.
+    NationalDashboardView,
+    /// deposit.create — Legal Officer creates escrow deposit with authority.
+    DepositCreate,
+    /// deposit.release — Legal Officer releases escrow deposit to payee.
+    DepositRelease,
+    /// litigation.manage — Legal Officer records court stays / litigation status.
+    LitigationManage,
+    /// dashboard.view — Baseline dashboard access for all authenticated users.
+    DashboardView,
 }
 
 #[allow(non_upper_case_globals)]
@@ -168,6 +235,7 @@ impl Permission {
 
     pub fn as_str(self) -> &'static str {
         match self {
+            // === Legacy 17 variants (snake_case form, unchanged for backward compat) ===
             Self::ManageUsers => "manage_users",
             Self::ManageRoles => "manage_roles",
             Self::ViewProjects => "view_projects",
@@ -185,7 +253,116 @@ impl Permission {
             Self::UpdateStakeholders => "update_stakeholders",
             Self::ViewAudit => "view_audit",
             Self::SubmitGrievances => "submit_grievances",
+            // === Phase 1 RBAC expansion (28 granular, dotted notation per SIH26016 spec) ===
+            Self::ParcelVerify => "parcel.verify",
+            Self::ParcelGeometryEdit => "parcel.geometry.edit",
+            Self::SiaCreate => "sia.create",
+            Self::SiaReview => "sia.review",
+            Self::NotificationIssue => "notification.issue",
+            Self::ObjectionSubmit => "objection.submit",
+            Self::ObjectionReview => "objection.review",
+            Self::HearingConduct => "hearing.conduct",
+            Self::DeclarationPrepare => "declaration.prepare",
+            Self::DeclarationApprove => "declaration.approve",
+            Self::AwardPrepare => "award.prepare",
+            Self::AwardReview => "award.review",
+            Self::AwardApprove => "award.approve",
+            Self::CompensationCalculate => "compensation.calculate",
+            Self::PaymentInitiate => "payment.initiate",
+            Self::PaymentApprove => "payment.approve",
+            Self::PossessionInitiate => "possession.initiate",
+            Self::RrManage => "rr.manage",
+            Self::DocumentUpload => "document.upload",
+            Self::DocumentReview => "document.review",
+            Self::DocumentApprove => "document.approve",
+            Self::WorkflowReject => "workflow.reject",
+            Self::AnalyticsView => "analytics.view",
+            Self::NationalDashboardView => "national.dashboard.view",
+            Self::DepositCreate => "deposit.create",
+            Self::DepositRelease => "deposit.release",
+            Self::LitigationManage => "litigation.manage",
+            Self::DashboardView => "dashboard.view",
         }
+    }
+
+    /// Parse a permission from its canonical string representation.
+    ///
+    /// For legacy permissions this is the snake_case form returned by
+    /// [`Permission::as_str`] (e.g. `"view_projects"`). For Phase 1 RBAC
+    /// expansion permissions it is the dotted form (e.g. `"parcel.verify"`).
+    ///
+    /// The previous snake_case form of the Phase 2 additions (e.g.
+    /// `"parcel_verify"`, `"workflow_reject"`) is *also* accepted for
+    /// backward compatibility with any persisted permission strings, but
+    /// `as_str()` now emits the canonical dotted form for new variants.
+    ///
+    /// Returns `None` for unrecognized strings so the `authorize()`
+    /// middleware in services/api can fall through to a 403 cleanly.
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s.trim() {
+            // Legacy snake_case permissions
+            "manage_users" => Some(Self::ManageUsers),
+            "manage_roles" => Some(Self::ManageRoles),
+            "view_projects" | "read_projects" => Some(Self::ViewProjects),
+            "create_projects" | "create_project" => Some(Self::CreateProjects),
+            "update_projects" | "update_project" => Some(Self::UpdateProjects),
+            "transition_projects" => Some(Self::TransitionProjects),
+            "view_parcels" | "read_parcels" => Some(Self::ViewParcels),
+            "create_parcels" | "create_parcel" => Some(Self::CreateParcels),
+            "update_parcels" | "update_parcel" => Some(Self::UpdateParcels),
+            "view_owners" | "read_owners" => Some(Self::ViewOwners),
+            "create_owners" | "create_owner" => Some(Self::CreateOwners),
+            "update_owners" | "update_owner" => Some(Self::UpdateOwners),
+            "view_stakeholders" | "read_stakeholders" => Some(Self::ViewStakeholders),
+            "create_stakeholders" | "create_stakeholder" => Some(Self::CreateStakeholders),
+            "update_stakeholders" | "update_stakeholder" => Some(Self::UpdateStakeholders),
+            "view_audit" | "audit_read" | "audit.read" => Some(Self::ViewAudit),
+            "submit_grievances" => Some(Self::SubmitGrievances),
+            // Phase 1 RBAC expansion — canonical dotted form first, then
+            // legacy snake_case alias for backward compatibility.
+            "parcel.verify" | "parcel_verify" => Some(Self::ParcelVerify),
+            "parcel.geometry.edit" | "parcel_geometry_edit" => Some(Self::ParcelGeometryEdit),
+            "sia.create" | "sia_create" => Some(Self::SiaCreate),
+            "sia.review" | "sia_review" => Some(Self::SiaReview),
+            "notification.issue" | "notification_issue" => Some(Self::NotificationIssue),
+            "objection.submit" | "objection_submit" => Some(Self::ObjectionSubmit),
+            "objection.review" | "objection_review" => Some(Self::ObjectionReview),
+            "hearing.conduct" | "hearing_conduct" => Some(Self::HearingConduct),
+            "declaration.prepare" | "declaration_prepare" => Some(Self::DeclarationPrepare),
+            "declaration.approve" | "declaration_approve" => Some(Self::DeclarationApprove),
+            "award.prepare" | "award_prepare" => Some(Self::AwardPrepare),
+            "award.review" | "award_review" => Some(Self::AwardReview),
+            "award.approve" | "award_approve" => Some(Self::AwardApprove),
+            "compensation.calculate" | "compensation_calculate" => {
+                Some(Self::CompensationCalculate)
+            }
+            "payment.initiate" | "payment_initiate" => Some(Self::PaymentInitiate),
+            "payment.approve" | "payment_approve" => Some(Self::PaymentApprove),
+            "possession.initiate" | "possession_initiate" => Some(Self::PossessionInitiate),
+            "rr.manage" | "rr_manage" => Some(Self::RrManage),
+            "document.upload" | "document_upload" => Some(Self::DocumentUpload),
+            "document.review" | "document_review" => Some(Self::DocumentReview),
+            "document.approve" | "document_approve" => Some(Self::DocumentApprove),
+            "workflow.reject" | "workflow_reject" => Some(Self::WorkflowReject),
+            "analytics.view" | "analytics_view" => Some(Self::AnalyticsView),
+            "national.dashboard.view" | "national_dashboard_view" => {
+                Some(Self::NationalDashboardView)
+            }
+            "deposit.create" | "deposit_create" => Some(Self::DepositCreate),
+            "deposit.release" | "deposit_release" => Some(Self::DepositRelease),
+            "litigation.manage" | "litigation_manage" => Some(Self::LitigationManage),
+            "dashboard.view" | "dashboard_view" => Some(Self::DashboardView),
+            _ => None,
+        }
+    }
+
+    /// All known permission variants in canonical order.
+    ///
+    /// Backs the `Admin` / `AuditOfficer` role mapping via `ALL_PERMISSIONS`
+    /// and is also surfaced to admin UIs / DB seeding scripts that need to
+    /// enumerate the full permission vocabulary.
+    pub fn all() -> &'static [Permission] {
+        &ALL_PERMISSIONS
     }
 }
 
@@ -195,7 +372,12 @@ impl fmt::Display for Permission {
     }
 }
 
-const ALL_PERMISSIONS: [Permission; 17] = [
+// 17 legacy + 28 Phase 1 RBAC expansion = 45 total permissions.
+// The order is: legacy snake_case permissions first, then the granular
+// dotted-form permissions grouped by domain. Order matters only for
+// human readability — `Role::permissions()` references variants directly.
+const ALL_PERMISSIONS: [Permission; 45] = [
+    // Legacy 17
     Permission::ManageUsers,
     Permission::ManageRoles,
     Permission::ViewProjects,
@@ -213,9 +395,42 @@ const ALL_PERMISSIONS: [Permission; 17] = [
     Permission::UpdateStakeholders,
     Permission::ViewAudit,
     Permission::SubmitGrievances,
+    // Phase 1 RBAC expansion (28 granular permissions)
+    Permission::ParcelVerify,
+    Permission::ParcelGeometryEdit,
+    Permission::SiaCreate,
+    Permission::SiaReview,
+    Permission::NotificationIssue,
+    Permission::ObjectionSubmit,
+    Permission::ObjectionReview,
+    Permission::HearingConduct,
+    Permission::DeclarationPrepare,
+    Permission::DeclarationApprove,
+    Permission::AwardPrepare,
+    Permission::AwardReview,
+    Permission::AwardApprove,
+    Permission::CompensationCalculate,
+    Permission::PaymentInitiate,
+    Permission::PaymentApprove,
+    Permission::PossessionInitiate,
+    Permission::RrManage,
+    Permission::DocumentUpload,
+    Permission::DocumentReview,
+    Permission::DocumentApprove,
+    Permission::WorkflowReject,
+    Permission::AnalyticsView,
+    Permission::NationalDashboardView,
+    Permission::DepositCreate,
+    Permission::DepositRelease,
+    Permission::LitigationManage,
+    Permission::DashboardView,
 ];
 
-const COLLECTOR_PERMISSIONS: [Permission; 13] = [
+// Collector: 20 perms — owns the high-stakes approval gates across the
+// RFCTLARR workflow (Section 11 notification, hearing, award approval,
+// possession, document gate, and stage rejection).
+const COLLECTOR_PERMISSIONS: [Permission; 20] = [
+    Permission::DashboardView,
     Permission::ViewProjects,
     Permission::CreateProjects,
     Permission::UpdateProjects,
@@ -227,105 +442,144 @@ const COLLECTOR_PERMISSIONS: [Permission; 13] = [
     Permission::CreateOwners,
     Permission::UpdateOwners,
     Permission::ViewStakeholders,
-    Permission::CreateStakeholders,
-    Permission::UpdateStakeholders,
+    Permission::NotificationIssue,
+    Permission::ObjectionReview,
+    Permission::HearingConduct,
+    Permission::AwardApprove,
+    Permission::PossessionInitiate,
+    Permission::DocumentApprove,
+    Permission::WorkflowReject,
+    Permission::ViewAudit,
 ];
 
+// Revenue Officer: 9 perms — parcel record verification + uploads.
 const REVENUE_OFFICER_PERMISSIONS: [Permission; 9] = [
+    Permission::DashboardView,
+    Permission::ViewProjects,
+    Permission::ViewParcels,
+    Permission::CreateParcels,
+    Permission::UpdateParcels,
+    Permission::ViewOwners,
+    Permission::ParcelVerify,
+    Permission::DocumentUpload,
+    Permission::TransitionProjects,
+];
+
+const LAND_REQUIRING_BODY_PERMISSIONS: [Permission; 9] = [
+    Permission::DashboardView,
     Permission::ViewProjects,
     Permission::CreateProjects,
     Permission::UpdateProjects,
     Permission::ViewParcels,
     Permission::CreateParcels,
-    Permission::UpdateParcels,
-    Permission::ViewOwners,
     Permission::ViewStakeholders,
-    Permission::UpdateStakeholders,
-];
-
-const LAND_REQUIRING_BODY_PERMISSIONS: [Permission; 7] = [
-    Permission::ViewProjects,
-    Permission::CreateProjects,
-    Permission::UpdateProjects,
+    Permission::DocumentUpload,
     Permission::TransitionProjects,
-    Permission::ViewParcels,
-    Permission::CreateParcels,
-    Permission::ViewStakeholders,
 ];
 
-const ADDITIONAL_COLLECTOR_PERMISSIONS: [Permission; 13] = [
-    Permission::ViewProjects,
-    Permission::CreateProjects,
-    Permission::UpdateProjects,
-    Permission::TransitionProjects,
-    Permission::ViewParcels,
-    Permission::CreateParcels,
-    Permission::UpdateParcels,
-    Permission::ViewOwners,
-    Permission::CreateOwners,
-    Permission::UpdateOwners,
-    Permission::ViewStakeholders,
-    Permission::CreateStakeholders,
-    Permission::UpdateStakeholders,
-];
-
-const GIS_OFFICER_PERMISSIONS: [Permission; 4] = [
-    Permission::ViewProjects,
-    Permission::ViewParcels,
-    Permission::CreateParcels,
-    Permission::UpdateParcels,
-];
-
-const SIA_OFFICER_PERMISSIONS: [Permission; 5] = [
+// Additional Collector: 10 perms — drafts declarations, reviews awards
+// and documents. Cannot issue Section 11 notification or approve the
+// final award (those stay with the Collector).
+const ADDITIONAL_COLLECTOR_PERMISSIONS: [Permission; 10] = [
+    Permission::DashboardView,
     Permission::ViewProjects,
     Permission::UpdateProjects,
     Permission::TransitionProjects,
     Permission::ViewParcels,
     Permission::ViewOwners,
+    Permission::DeclarationPrepare,
+    Permission::AwardReview,
+    Permission::DocumentReview,
+    Permission::ViewAudit,
 ];
 
-const LEGAL_OFFICER_PERMISSIONS: [Permission; 6] = [
+const GIS_OFFICER_PERMISSIONS: [Permission; 7] = [
+    Permission::DashboardView,
+    Permission::ViewProjects,
+    Permission::ViewParcels,
+    Permission::CreateParcels,
+    Permission::UpdateParcels,
+    Permission::ParcelGeometryEdit,
+    Permission::DocumentUpload,
+];
+
+const SIA_OFFICER_PERMISSIONS: [Permission; 9] = [
+    Permission::DashboardView,
     Permission::ViewProjects,
     Permission::UpdateProjects,
     Permission::ViewParcels,
     Permission::ViewOwners,
+    Permission::SiaCreate,
+    Permission::SiaReview,
+    Permission::DocumentUpload,
+    Permission::TransitionProjects,
+];
+
+// Legal Officer: 13 perms — award preparation/review, escrow deposits,
+// litigation tracking, document review.
+const LEGAL_OFFICER_PERMISSIONS: [Permission; 13] = [
+    Permission::DashboardView,
+    Permission::ViewProjects,
+    Permission::ViewParcels,
+    Permission::ViewOwners,
     Permission::ViewStakeholders,
+    Permission::AwardPrepare,
+    Permission::AwardReview,
+    Permission::DepositCreate,
+    Permission::DepositRelease,
+    Permission::LitigationManage,
+    Permission::DocumentReview,
+    Permission::ViewAudit,
     Permission::SubmitGrievances,
 ];
 
-const FINANCE_OFFICER_PERMISSIONS: [Permission; 6] = [
+// Finance Officer: 10 perms — compensation calculation + PFMS payment flow.
+const FINANCE_OFFICER_PERMISSIONS: [Permission; 10] = [
+    Permission::DashboardView,
     Permission::ViewProjects,
     Permission::UpdateProjects,
-    Permission::TransitionProjects,
     Permission::ViewParcels,
     Permission::ViewOwners,
-    Permission::ViewAudit,
+    Permission::CompensationCalculate,
+    Permission::PaymentInitiate,
+    Permission::PaymentApprove,
+    Permission::TransitionProjects,
+    Permission::DocumentUpload,
 ];
 
+// R&R Officer: 7 perms — manages resettlement & rehabilitation entitlements.
 const RR_OFFICER_PERMISSIONS: [Permission; 7] = [
+    Permission::DashboardView,
     Permission::ViewProjects,
-    Permission::UpdateProjects,
-    Permission::TransitionProjects,
     Permission::ViewParcels,
     Permission::ViewOwners,
-    Permission::CreateOwners,
-    Permission::UpdateOwners,
+    Permission::RrManage,
+    Permission::DocumentUpload,
+    Permission::TransitionProjects,
 ];
 
-const GOVERNMENT_REVIEWER_PERMISSIONS: [Permission; 7] = [
+// Government Reviewer: 10 perms — oversight over SIA, declarations,
+// analytics, and the national dashboard.
+const GOVERNMENT_REVIEWER_PERMISSIONS: [Permission; 10] = [
+    Permission::DashboardView,
     Permission::ViewProjects,
-    Permission::UpdateProjects,
-    Permission::TransitionProjects,
     Permission::ViewParcels,
     Permission::ViewOwners,
     Permission::ViewStakeholders,
     Permission::ViewAudit,
+    Permission::AnalyticsView,
+    Permission::NationalDashboardView,
+    Permission::SiaReview,
+    Permission::DeclarationApprove,
 ];
 
-const LAND_OWNER_PERMISSIONS: [Permission; 4] = [
+const LAND_OWNER_PERMISSIONS: [Permission; 7] = [
+    Permission::DashboardView,
     Permission::ViewProjects,
     Permission::ViewParcels,
     Permission::ViewOwners,
+    Permission::ObjectionSubmit,
+    Permission::DocumentUpload,
     Permission::SubmitGrievances,
 ];
 
@@ -1175,6 +1429,59 @@ mod tests {
         assert!(Role::RevenueOfficer.can(Permission::ViewOwners));
         assert!(Role::LandOwner.can(Permission::SubmitGrievances));
         assert!(!Role::LandOwner.can(Permission::ManageUsers));
+    }
+
+    #[test]
+    fn phase2_stage_action_permissions_round_trip_and_are_role_scoped() {
+        // as_str ↔ from_str round-trip for every Phase 2 permission.
+        let phase2 = [
+            Permission::ParcelVerify,
+            Permission::WorkflowReject,
+            Permission::SiaCreate,
+            Permission::SiaReview,
+            Permission::NotificationIssue,
+            Permission::ObjectionSubmit,
+            Permission::ObjectionReview,
+            Permission::HearingConduct,
+            Permission::DeclarationPrepare,
+            Permission::DeclarationApprove,
+            Permission::AwardPrepare,
+            Permission::AwardReview,
+            Permission::AwardApprove,
+            Permission::CompensationCalculate,
+            Permission::PaymentInitiate,
+            Permission::PaymentApprove,
+            Permission::PossessionInitiate,
+            Permission::RrManage,
+            Permission::AnalyticsView,
+        ];
+        for p in phase2 {
+            let s = p.as_str();
+            assert_eq!(Permission::from_str(s), Some(p), "round-trip failed for {s}");
+        }
+
+        // Role scoping: Admin has every Phase 2 permission; LandOwner
+        // only has ObjectionSubmit (the rest must be denied).
+        for p in phase2 {
+            assert!(Role::Admin.can(p), "Admin should have {}", p.as_str());
+        }
+        assert!(Role::LandOwner.can(Permission::ObjectionSubmit));
+        assert!(!Role::LandOwner.can(Permission::SiaCreate));
+        assert!(!Role::LandOwner.can(Permission::PaymentApprove));
+
+        // SIA-specific permissions land on the SiaOfficer.
+        assert!(Role::SiaOfficer.can(Permission::SiaCreate));
+        assert!(Role::SiaOfficer.can(Permission::SiaReview));
+        // Finance-specific permissions land on the FinanceOfficer.
+        assert!(Role::FinanceOfficer.can(Permission::PaymentInitiate));
+        assert!(Role::FinanceOfficer.can(Permission::PaymentApprove));
+        assert!(Role::FinanceOfficer.can(Permission::CompensationCalculate));
+        // R&R permission lands on the RrOfficer.
+        assert!(Role::RrOfficer.can(Permission::RrManage));
+        // AnalyticsView lands on GovernmentReviewer.
+        assert!(Role::GovernmentReviewer.can(Permission::AnalyticsView));
+        // from_str on an unknown code returns None (does not panic).
+        assert_eq!(Permission::from_str("not_a_real_permission"), None);
     }
 
     #[test]
