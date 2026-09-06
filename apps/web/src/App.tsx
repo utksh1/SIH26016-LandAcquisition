@@ -2019,21 +2019,35 @@ export default function App() {
               {activePersona.title}
             </strong>
             <small style={{ color: '#8da79a', fontSize: 10 }}>{resolvePersonaName(activePersona)}</small>
-            {/* DEMO PERSONA label — clearly indicates this is a demo role switcher,
-                not a real authentication system. Required by spec §13. */}
-            <div style={{
-              marginTop: 6,
-              padding: '2px 6px',
-              background: '#3a2410',
-              border: '1px solid #8c6d28',
-              borderRadius: 3,
-              font: '700 8px "DM Mono"',
-              color: '#e6bf65',
-              letterSpacing: '0.08em',
-              display: 'inline-block',
-            }}>
-              ⚡ DEMO PERSONA
-            </div>
+            {authEmployee ? (
+              <div style={{
+                marginTop: 6,
+                padding: '2px 6px',
+                background: '#1a3a2a',
+                border: '1px solid #28684a',
+                borderRadius: 3,
+                font: '700 8px "DM Mono"',
+                color: '#5be69a',
+                letterSpacing: '0.08em',
+                display: 'inline-block',
+              }}>
+                🏛 e-HRMS VERIFIED
+              </div>
+            ) : (
+              <div style={{
+                marginTop: 6,
+                padding: '2px 6px',
+                background: '#18332a',
+                border: '1px solid #28473a',
+                borderRadius: 3,
+                font: '700 8px "DM Mono"',
+                color: '#8da79a',
+                letterSpacing: '0.08em',
+                display: 'inline-block',
+              }}>
+                🏛 STATUTORY ROLE
+              </div>
+            )}
             {/* RBAC context indicator — shows permissions count + jurisdiction */}
             {rbacContext && (
               <div style={{ marginTop: 6, fontSize: 9, color: '#6a8e7e', font: '"DM Mono"' }}>
@@ -2171,7 +2185,7 @@ export default function App() {
               style={{ cursor: 'pointer' }}
               onClick={() => setActiveCategory('dashboard')}
             >
-              {activePersona.dashboardRoute}
+              {activePersona.title} Command Centre
             </span>
             {activeCategory !== 'dashboard' && (
               <>
@@ -2184,8 +2198,6 @@ export default function App() {
                 </span>
               </>
             )}
-            <Icon name="chevron" size={13} />
-            <strong>{selected.name}</strong>
           </div>
           <div className="topbar-actions">
             {/* Authenticated user profile badge */}
@@ -2233,7 +2245,7 @@ export default function App() {
             >
               {stakeholderPersonas.map((p) => (
                 <option key={p.id} value={p.id}>
-                  Switch: {p.title} ({p.dashboardRoute})
+                  Switch: {p.title}
                 </option>
               ))}
             </select>
@@ -2245,21 +2257,6 @@ export default function App() {
             >
               Logout ➔
             </button>
-
-            <button
-              className="secondary-button"
-              onClick={() => setShowAiModal(true)}
-            >
-              AI Studio
-            </button>
-            {can('view_audit') && (
-              <button
-                className="primary-button"
-                onClick={handleOpenAudit}
-              >
-                Audit Chain
-              </button>
-            )}
           </div>
         </header>
 
@@ -2323,66 +2320,6 @@ export default function App() {
             </div>
           </section>
 
-          {/* 90-Second Demo Guided Stepper Bar */}
-          <section
-            style={{
-              background: '#f4efe2',
-              border: '1px solid #e2d7c0',
-              borderRadius: 8,
-              padding: '12px 18px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              marginBottom: 20,
-              gap: 12,
-              flexWrap: 'wrap',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span
-                style={{
-                  background: '#b68349',
-                  color: '#fff',
-                  font: '700 10px "DM Mono"',
-                  padding: '3px 8px',
-                  borderRadius: 4,
-                }}
-              >
-                90s DEMO TOUR
-              </span>
-              <span style={{ fontSize: 12, color: '#4a3b22' }}>
-                Current Demonstration Stage: <strong>Stage {currentStageIdx}: {rfctlarrStages[currentStageIdx].name}</strong>
-              </span>
-            </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button
-                className="secondary-button"
-                onClick={() => {
-                  const prev = Math.max(0, currentStageIdx - 1)
-                  setCurrentStageIdx(prev)
-                  const targetPersonaId = stageToPersonaMap[prev]
-                  const found = stakeholderPersonas.find((p) => p.id === targetPersonaId)
-                  if (found) setActivePersona(found)
-                  showToast(`Switched to Stage ${prev}: ${rfctlarrStages[prev].name} (${found?.title})`)
-                }}
-              >
-                Previous Stage
-              </button>
-              <button
-                className="primary-button"
-                onClick={() => {
-                  const next = Math.min(rfctlarrStages.length - 1, currentStageIdx + 1)
-                  setCurrentStageIdx(next)
-                  const targetPersonaId = stageToPersonaMap[next]
-                  const found = stakeholderPersonas.find((p) => p.id === targetPersonaId)
-                  if (found) setActivePersona(found)
-                  showToast(`Moved to Stage ${next}: ${rfctlarrStages[next].name} (${found?.title})!`)
-                }}
-              >
-                Next Stage ➔
-              </button>
-            </div>
-          </section>
 
           {/* KPI Row — role-specific cards from rbac.ts roleKpiCards().
               Falls back to the API-fetched kpis (from /dashboard/kpis) if
