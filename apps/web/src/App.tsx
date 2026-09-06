@@ -32,6 +32,7 @@ import {
   type NavSection,
   type KpiCard,
   type WorkflowAction,
+  type StakeholderJurisdiction,
   NAV_CONFIG,
   filterNavForPermissions,
   filterNavForRoleAndPermissions,
@@ -40,6 +41,9 @@ import {
   roleKpiCards,
   stageWorkflowActions,
   isLandOwnerRole,
+  filterProjectsByJurisdiction,
+  filterParcelsByJurisdiction,
+  canInitiateAcquisitionProposal,
 } from './rbac'
 import { CategoryViews } from './components/CategoryViews'
 
@@ -218,18 +222,7 @@ function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
   }
 }
 
-export type StakeholderId =
-  | 'requiring_body'
-  | 'collector'
-  | 'additional_collector'
-  | 'revenue_officer'
-  | 'gis_surveyor'
-  | 'sia_officer'
-  | 'legal_officer'
-  | 'finance_officer'
-  | 'rehabilitation_officer'
-  | 'government_dashboard'
-  | 'land_owner'
+export type StakeholderId = string
 
 export interface StakeholderPersona {
   id: StakeholderId
@@ -246,24 +239,409 @@ export interface StakeholderPersona {
   icon: IconName
   color: string
   description: string
+  jurisdiction: StakeholderJurisdiction
+  categoryGroup: 'Collectors' | 'State Governments' | 'Local Bodies' | 'Requiring Bodies' | 'Citizen Landowners' | 'National & Technical'
 }
 
 const stakeholderPersonas: StakeholderPersona[] = [
+  // =========================================================================
+  // 1. DISTRICT COLLECTORS (CALA) - Multi-District Isolation
+  // =========================================================================
   {
     id: 'collector',
     employeeId: 'EMP001',
     role: 'Collector',
     ehrmsRole: 'COLLECTOR',
     dashboardRoute: '/dashboard/collector',
-    title: 'Collector',
+    title: 'Collector (Kurnool, AP)',
     subtitle: 'District Administration / CALA',
-    name: 'Raj Sharma',
-    designation: 'Collector',
-    department: 'District Administration',
-    badge: 'COLLECTOR [EMP001]',
+    name: 'Dr. Rajesh Verma',
+    designation: 'Collector & District Magistrate',
+    department: 'Kurnool Collectorate (Andhra Pradesh)',
+    badge: 'COLLECTOR [KURNOOL, AP]',
     icon: 'folder',
     color: '#b68349',
-    description: 'Active projects review, pending statutory gate approvals, acquisition workflow status, notifications, and reports.',
+    description: 'Statutory approvals, Section 11 gazette, Section 15 hearings, and Section 23/30 awards for Kurnool District.',
+    jurisdiction: {
+      scope: 'district',
+      scopeCode: 'AP-KUR',
+      stateCode: 'AP',
+      districtCode: 'KUR',
+      label: 'District: Kurnool (AP-KUR)',
+    },
+    categoryGroup: 'Collectors',
+  },
+  {
+    id: 'collector_mahabubnagar',
+    employeeId: 'EMP-MBN01',
+    role: 'Collector',
+    ehrmsRole: 'COLLECTOR',
+    dashboardRoute: '/dashboard/collector',
+    title: 'Collector (Mahabubnagar, TS)',
+    subtitle: 'District Administration / CALA',
+    name: 'Dr. T. Priyanka',
+    designation: 'Collector & District Magistrate',
+    department: 'Mahabubnagar Collectorate (Telangana)',
+    badge: 'COLLECTOR [MAHABUBNAGAR, TS]',
+    icon: 'folder',
+    color: '#b68349',
+    description: 'Statutory approvals, Section 11 gazette, Section 15 hearings, and Section 23/30 awards for Mahabubnagar District.',
+    jurisdiction: {
+      scope: 'district',
+      scopeCode: 'TS-MBN',
+      stateCode: 'TS',
+      districtCode: 'MBN',
+      label: 'District: Mahabubnagar (TS-MBN)',
+    },
+    categoryGroup: 'Collectors',
+  },
+  {
+    id: 'collector_varanasi',
+    employeeId: 'EMP-VNS01',
+    role: 'Collector',
+    ehrmsRole: 'COLLECTOR',
+    dashboardRoute: '/dashboard/collector',
+    title: 'Collector (Varanasi, UP)',
+    subtitle: 'District Administration / CALA',
+    name: 'S. Rajalingam',
+    designation: 'Collector & District Magistrate',
+    department: 'Varanasi Collectorate (Uttar Pradesh)',
+    badge: 'COLLECTOR [VARANASI, UP]',
+    icon: 'folder',
+    color: '#b68349',
+    description: 'Statutory approvals, Section 11 gazette, Section 15 hearings, and Section 23/30 awards for Varanasi District.',
+    jurisdiction: {
+      scope: 'district',
+      scopeCode: 'UP-VNS',
+      stateCode: 'UP',
+      districtCode: 'VNS',
+      label: 'District: Varanasi (UP-VNS)',
+    },
+    categoryGroup: 'Collectors',
+  },
+
+  // =========================================================================
+  // 2. STATE GOVERNMENTS - Multi-State Horizontal Isolation
+  // =========================================================================
+  {
+    id: 'state_andhra',
+    employeeId: 'EMP-AP01',
+    role: 'Government Reviewer',
+    ehrmsRole: 'GOVERNMENT_REVIEWER',
+    dashboardRoute: '/dashboard/government',
+    title: 'State Revenue Secy (AP)',
+    subtitle: 'Appropriate Government (State Tier)',
+    name: 'K. Chandrasekhar',
+    designation: 'Principal Secretary (Revenue)',
+    department: 'Revenue Secretariat, Govt of Andhra Pradesh',
+    badge: 'STATE GOVT [ANDHRA PRADESH]',
+    icon: 'shield',
+    color: '#00684a',
+    description: 'State-level oversight across all Andhra Pradesh acquisition corridors (Kurnool, Amaravati). Strictly isolated from other states.',
+    jurisdiction: {
+      scope: 'state',
+      scopeCode: 'AP',
+      stateCode: 'AP',
+      label: 'State: Andhra Pradesh (AP)',
+    },
+    categoryGroup: 'State Governments',
+  },
+  {
+    id: 'state_telangana',
+    employeeId: 'EMP-TS01',
+    role: 'Government Reviewer',
+    ehrmsRole: 'GOVERNMENT_REVIEWER',
+    dashboardRoute: '/dashboard/government',
+    title: 'State Revenue Secy (TS)',
+    subtitle: 'Appropriate Government (State Tier)',
+    name: 'B. Radhakrishnan',
+    designation: 'Principal Secretary (Revenue)',
+    department: 'Revenue Secretariat, Govt of Telangana',
+    badge: 'STATE GOVT [TELANGANA]',
+    icon: 'shield',
+    color: '#00684a',
+    description: 'State-level oversight across all Telangana industrial corridors (Mahabubnagar, Hyderabad). Strictly isolated from other states.',
+    jurisdiction: {
+      scope: 'state',
+      scopeCode: 'TS',
+      stateCode: 'TS',
+      label: 'State: Telangana (TS)',
+    },
+    categoryGroup: 'State Governments',
+  },
+  {
+    id: 'state_up',
+    employeeId: 'EMP-UP01',
+    role: 'Government Reviewer',
+    ehrmsRole: 'GOVERNMENT_REVIEWER',
+    dashboardRoute: '/dashboard/government',
+    title: 'State Revenue Secy (UP)',
+    subtitle: 'Appropriate Government (State Tier)',
+    name: 'S. K. Awasthi',
+    designation: 'Principal Secretary (Revenue)',
+    department: 'Revenue Secretariat, Govt of Uttar Pradesh',
+    badge: 'STATE GOVT [UTTAR PRADESH]',
+    icon: 'shield',
+    color: '#00684a',
+    description: 'State-level oversight across all Uttar Pradesh corridors (Varanasi, Prayagraj). Strictly isolated from other states.',
+    jurisdiction: {
+      scope: 'state',
+      scopeCode: 'UP',
+      stateCode: 'UP',
+      label: 'State: Uttar Pradesh (UP)',
+    },
+    categoryGroup: 'State Governments',
+  },
+
+  // =========================================================================
+  // 3. LOCAL BODIES / TEHSILS - Sub-District Horizontal Isolation
+  // =========================================================================
+  {
+    id: 'local_kurnool',
+    employeeId: 'EMP-VRO01',
+    role: 'Revenue Officer',
+    ehrmsRole: 'REVENUE_OFFICER',
+    dashboardRoute: '/dashboard/revenue',
+    title: 'Tehsildar (Kurnool Rural)',
+    subtitle: 'Local Body / Mandal Office',
+    name: 'M. Balaji',
+    designation: 'Tehsildar & Mandal Executive Officer',
+    department: 'Kurnool Rural Mandal (Andhra Pradesh)',
+    badge: 'LOCAL BODY [KURNOOL MANDAL]',
+    icon: 'file',
+    color: '#49735a',
+    description: 'Mandal-level Jamabandi title verification, Gram Sabha consultations, and field panchnama in Kurnool Rural.',
+    jurisdiction: {
+      scope: 'local_body',
+      scopeCode: 'LB-AP-KUR-01',
+      stateCode: 'AP',
+      districtCode: 'KUR',
+      localBodyCode: 'LB-AP-KUR-01',
+      label: 'Local Body: Kurnool Rural Mandal',
+    },
+    categoryGroup: 'Local Bodies',
+  },
+  {
+    id: 'local_mahabubnagar',
+    employeeId: 'EMP-VRO02',
+    role: 'Revenue Officer',
+    ehrmsRole: 'REVENUE_OFFICER',
+    dashboardRoute: '/dashboard/revenue',
+    title: 'Tehsildar (Jadcherla Mandal)',
+    subtitle: 'Local Body / Mandal Office',
+    name: 'D. Anjaiah',
+    designation: 'Tehsildar & Mandal Executive Officer',
+    department: 'Jadcherla Mandal (Telangana)',
+    badge: 'LOCAL BODY [JADCHERLA MANDAL]',
+    icon: 'file',
+    color: '#49735a',
+    description: 'Mandal-level Jamabandi title verification, Gram Sabha consultations, and field panchnama in Jadcherla.',
+    jurisdiction: {
+      scope: 'local_body',
+      scopeCode: 'LB-TS-MBN-01',
+      stateCode: 'TS',
+      districtCode: 'MBN',
+      localBodyCode: 'LB-TS-MBN-01',
+      label: 'Local Body: Jadcherla Mandal',
+    },
+    categoryGroup: 'Local Bodies',
+  },
+  {
+    id: 'local_varanasi',
+    employeeId: 'EMP-VRO03',
+    role: 'Revenue Officer',
+    ehrmsRole: 'REVENUE_OFFICER',
+    dashboardRoute: '/dashboard/revenue',
+    title: 'Tehsildar (Kashi Tehsil)',
+    subtitle: 'Local Body / Tehsil Office',
+    name: 'Ramakant Mishra',
+    designation: 'Tehsildar & Executive Magistrate',
+    department: 'Kashi Tehsil Office (Uttar Pradesh)',
+    badge: 'LOCAL BODY [KASHI TEHSIL]',
+    icon: 'file',
+    color: '#49735a',
+    description: 'Tehsil-level Jamabandi title verification, Gram Sabha consultations, and field panchnama in Kashi.',
+    jurisdiction: {
+      scope: 'local_body',
+      scopeCode: 'LB-UP-VNS-01',
+      stateCode: 'UP',
+      districtCode: 'VNS',
+      localBodyCode: 'LB-UP-VNS-01',
+      label: 'Local Body: Kashi Tehsil',
+    },
+    categoryGroup: 'Local Bodies',
+  },
+
+  // =========================================================================
+  // 4. LAND REQUIRING BODIES - Sponsoring Institutions (Authorized to Raise Proposals)
+  // =========================================================================
+  {
+    id: 'requiring_body',
+    employeeId: 'EMP006',
+    role: 'Land Requiring Body',
+    ehrmsRole: 'LAND_REQUIRING_BODY',
+    dashboardRoute: '/dashboard/requiring-body',
+    title: 'Land Requiring Body (NHAI)',
+    subtitle: 'Highway Infrastructure Sponsoring Institution',
+    name: 'Praveen Singhal',
+    designation: 'Chief Project Officer',
+    department: 'National Highways Authority of India (NHAI)',
+    badge: 'REQ BODY [NHAI]',
+    icon: 'building',
+    color: '#91723e',
+    description: 'Authorized Institution: Submit new land acquisition proposals, upload DPR feasibility reports, and track NHAI highway corridors.',
+    jurisdiction: {
+      scope: 'requiring_body',
+      scopeCode: 'NHAI',
+      requiringBodyCode: 'NHAI',
+      label: 'Requiring Body: NHAI',
+    },
+    categoryGroup: 'Requiring Bodies',
+  },
+  {
+    id: 'req_hpcl',
+    employeeId: 'EMP-HPCL01',
+    role: 'Land Requiring Body',
+    ehrmsRole: 'LAND_REQUIRING_BODY',
+    dashboardRoute: '/dashboard/requiring-body',
+    title: 'Land Requiring Body (HPCL)',
+    subtitle: 'Petroleum Pipeline Sponsoring Institution',
+    name: 'K. S. Murthy',
+    designation: 'Executive Director (Pipelines)',
+    department: 'Hindustan Petroleum Corporation Ltd (HPCL)',
+    badge: 'REQ BODY [HPCL]',
+    icon: 'building',
+    color: '#91723e',
+    description: 'Authorized Institution: Submit Right-of-User proposals and monitor petroleum pipeline acquisition files.',
+    jurisdiction: {
+      scope: 'requiring_body',
+      scopeCode: 'HPCL',
+      requiringBodyCode: 'HPCL',
+      label: 'Requiring Body: HPCL',
+    },
+    categoryGroup: 'Requiring Bodies',
+  },
+  {
+    id: 'req_dfccil',
+    employeeId: 'EMP-DFCC01',
+    role: 'Land Requiring Body',
+    ehrmsRole: 'LAND_REQUIRING_BODY',
+    dashboardRoute: '/dashboard/requiring-body',
+    title: 'Land Requiring Body (DFCCIL)',
+    subtitle: 'Railway Infrastructure Sponsoring Institution',
+    name: 'Rajiv Bhatnagar',
+    designation: 'General Manager (Land Acquisition)',
+    department: 'Dedicated Freight Corridor Corp of India (DFCCIL)',
+    badge: 'REQ BODY [DFCCIL]',
+    icon: 'building',
+    color: '#91723e',
+    description: 'Authorized Institution: Submit freight corridor proposals and track rail corridor land vesting.',
+    jurisdiction: {
+      scope: 'requiring_body',
+      scopeCode: 'DFCCIL',
+      requiringBodyCode: 'DFCCIL',
+      label: 'Requiring Body: DFCCIL',
+    },
+    categoryGroup: 'Requiring Bodies',
+  },
+
+  // =========================================================================
+  // 5. CITIZEN LANDOWNERS - Multi-Owner Private Data Isolation
+  // =========================================================================
+  {
+    id: 'land_owner',
+    role: 'Land Owner',
+    dashboardRoute: '/dashboard/landowner',
+    title: 'Citizen (Rameshwar Sharma)',
+    subtitle: 'Kurnool District (Andhra Pradesh)',
+    name: 'Rameshwar Sharma',
+    designation: 'Citizen Landowner (Survey #1042, #1043)',
+    department: 'Kurnool District (AP)',
+    badge: 'CITIZEN [RAMESHWAR SHARMA]',
+    icon: 'people',
+    color: '#416353',
+    description: 'Personal cadastral land holdings (#1042 / #1043), Section 11 notices, Section 15 objections, and PFMS DBT credit advice. Strictly isolated from other citizens.',
+    jurisdiction: {
+      scope: 'citizen',
+      scopeCode: 'CIT-KRN-01',
+      stateCode: 'AP',
+      districtCode: 'KUR',
+      citizenOwnerId: 'CITIZEN-AP-01',
+      label: 'Citizen: Rameshwar Sharma (Survey #1042, #1043)',
+    },
+    categoryGroup: 'Citizen Landowners',
+  },
+  {
+    id: 'citizen_sunita',
+    role: 'Land Owner',
+    dashboardRoute: '/dashboard/landowner',
+    title: 'Citizen (Sunita Devi)',
+    subtitle: 'Mahabubnagar District (Telangana)',
+    name: 'Sunita Devi',
+    designation: 'Citizen Landowner (Survey #2041)',
+    department: 'Mahabubnagar District (TS)',
+    badge: 'CITIZEN [SUNITA DEVI]',
+    icon: 'people',
+    color: '#416353',
+    description: 'Personal cadastral land holdings (#2041), Section 11 notices, Section 15 objections, and PFMS DBT credit advice. Strictly isolated from other citizens.',
+    jurisdiction: {
+      scope: 'citizen',
+      scopeCode: 'CIT-MBN-01',
+      stateCode: 'TS',
+      districtCode: 'MBN',
+      citizenOwnerId: 'CITIZEN-TS-01',
+      label: 'Citizen: Sunita Devi (Survey #2041)',
+    },
+    categoryGroup: 'Citizen Landowners',
+  },
+  {
+    id: 'citizen_vikram',
+    role: 'Land Owner',
+    dashboardRoute: '/dashboard/landowner',
+    title: 'Citizen (Vikram Singh)',
+    subtitle: 'Varanasi District (Uttar Pradesh)',
+    name: 'Vikram Singh',
+    designation: 'Citizen Landowner (Survey #3012)',
+    department: 'Varanasi District (UP)',
+    badge: 'CITIZEN [VIKRAM SINGH]',
+    icon: 'people',
+    color: '#416353',
+    description: 'Personal cadastral land holdings (#3012), Section 11 notices, Section 15 objections, and PFMS DBT credit advice. Strictly isolated from other citizens.',
+    jurisdiction: {
+      scope: 'citizen',
+      scopeCode: 'CIT-VNS-01',
+      stateCode: 'UP',
+      districtCode: 'VNS',
+      citizenOwnerId: 'CITIZEN-UP-01',
+      label: 'Citizen: Vikram Singh (Survey #3012)',
+    },
+    categoryGroup: 'Citizen Landowners',
+  },
+
+  // =========================================================================
+  // 6. NATIONAL OVERSIGHT & TECHNICAL STAGE OFFICERS
+  // =========================================================================
+  {
+    id: 'government_dashboard',
+    employeeId: 'EMP010',
+    role: 'Government Reviewer',
+    ehrmsRole: 'GOVERNMENT_REVIEWER',
+    dashboardRoute: '/dashboard/government',
+    title: 'Union Govt Reviewer (National)',
+    subtitle: 'Central Ministry / Appropriate Government',
+    name: 'Meenakshi Sundaram',
+    designation: 'Joint Secretary / Reviewer',
+    department: 'Ministry of Rural Development & Land Resources',
+    badge: 'CENTRAL GOVT [NATIONAL]',
+    icon: 'shield',
+    color: '#10251f',
+    description: 'National overview across 18 states, AI delay risk prediction, cryptographic audit ledger, and workflow regimes.',
+    jurisdiction: {
+      scope: 'national',
+      scopeCode: 'NATIONAL',
+      label: 'National Authority (Union Govt)',
+    },
+    categoryGroup: 'National & Technical',
   },
   {
     id: 'additional_collector',
@@ -271,15 +649,23 @@ const stakeholderPersonas: StakeholderPersona[] = [
     role: 'Additional Collector',
     ehrmsRole: 'ADDITIONAL_COLLECTOR',
     dashboardRoute: '/dashboard/collector',
-    title: 'Additional Collector',
+    title: 'Additional Collector (Kurnool, AP)',
     subtitle: 'District Collectorate / CALA',
     name: 'Harish Meena',
     designation: 'Additional Collector',
-    department: 'District Collectorate / CALA',
+    department: 'District Collectorate / CALA (Kurnool)',
     badge: 'ADDL COLLECTOR [EMP008]',
     icon: 'folder',
     color: '#9c6f39',
-    description: 'Section 19 declaration scrutiny, Section 23/30 award scrutiny, and multi-tehsil coordination.',
+    description: 'Section 19 declaration scrutiny, Section 23/30 award scrutiny, and multi-tehsil coordination in Kurnool District.',
+    jurisdiction: {
+      scope: 'district',
+      scopeCode: 'AP-KUR',
+      stateCode: 'AP',
+      districtCode: 'KUR',
+      label: 'District: Kurnool (AP-KUR)',
+    },
+    categoryGroup: 'National & Technical',
   },
   {
     id: 'revenue_officer',
@@ -287,15 +673,23 @@ const stakeholderPersonas: StakeholderPersona[] = [
     role: 'Revenue Officer',
     ehrmsRole: 'REVENUE_OFFICER',
     dashboardRoute: '/dashboard/revenue',
-    title: 'Revenue Officer',
+    title: 'Revenue Officer (Kurnool, AP)',
     subtitle: 'Revenue Department / Tehsil Office',
     name: 'Amit Verma',
     designation: 'Revenue Officer',
-    department: 'Revenue Department',
+    department: 'Revenue Department (Kurnool)',
     badge: 'REVENUE OFFICER [EMP002]',
     icon: 'file',
     color: '#49735a',
     description: 'Assigned parcels list, land title verification tasks, ownership verification, pending field surveys, and DILRMP sync.',
+    jurisdiction: {
+      scope: 'district',
+      scopeCode: 'AP-KUR',
+      stateCode: 'AP',
+      districtCode: 'KUR',
+      label: 'District: Kurnool (AP-KUR)',
+    },
+    categoryGroup: 'National & Technical',
   },
   {
     id: 'gis_surveyor',
@@ -303,15 +697,23 @@ const stakeholderPersonas: StakeholderPersona[] = [
     role: 'GIS Officer',
     ehrmsRole: 'GIS_OFFICER',
     dashboardRoute: '/dashboard/gis',
-    title: 'GIS Officer',
+    title: 'GIS Officer (Kurnool, AP)',
     subtitle: 'Survey Department / Geoinformatics',
     name: 'Neha Singh',
     designation: 'GIS Officer',
-    department: 'Survey Department',
+    department: 'Survey Department (Kurnool)',
     badge: 'GIS OFFICER [EMP003]',
     icon: 'map',
     color: '#346660',
     description: 'Interactive cadastral parcel map, project Right-of-Way boundaries, and spatial GIS demarcation tasks.',
+    jurisdiction: {
+      scope: 'district',
+      scopeCode: 'AP-KUR',
+      stateCode: 'AP',
+      districtCode: 'KUR',
+      label: 'District: Kurnool (AP-KUR)',
+    },
+    categoryGroup: 'National & Technical',
   },
   {
     id: 'sia_officer',
@@ -319,15 +721,23 @@ const stakeholderPersonas: StakeholderPersona[] = [
     role: 'SIA Officer',
     ehrmsRole: 'SIA_OFFICER',
     dashboardRoute: '/dashboard/revenue',
-    title: 'SIA Officer',
+    title: 'SIA Officer (Kurnool, AP)',
     subtitle: 'Social Impact Assessment Unit',
     name: 'Dr. Arvinder Roy',
     designation: 'SIA Officer',
-    department: 'Social Impact Assessment Unit',
+    department: 'Social Impact Assessment Unit (Kurnool)',
     badge: 'SIA OFFICER [EMP007]',
     icon: 'people',
     color: '#526938',
     description: 'Section 4 SIA public hearing documentation, affected families census baseline, and Social Impact Management Plan (SIMP).',
+    jurisdiction: {
+      scope: 'district',
+      scopeCode: 'AP-KUR',
+      stateCode: 'AP',
+      districtCode: 'KUR',
+      label: 'District: Kurnool (AP-KUR)',
+    },
+    categoryGroup: 'National & Technical',
   },
   {
     id: 'legal_officer',
@@ -335,15 +745,23 @@ const stakeholderPersonas: StakeholderPersona[] = [
     role: 'Legal Officer',
     ehrmsRole: 'LEGAL_OFFICER',
     dashboardRoute: '/dashboard/collector',
-    title: 'Legal Officer',
+    title: 'Legal Officer (Kurnool, AP)',
     subtitle: 'Legal & Litigation Cell',
     name: 'Adv. Madhav Joshi',
     designation: 'Legal Officer',
-    department: 'Legal & Litigation Cell',
+    department: 'Legal & Litigation Cell (Kurnool)',
     badge: 'LEGAL OFFICER [EMP009]',
     icon: 'folder',
     color: '#684534',
     description: 'Statutory compliance verification, draft Section 23 award formulation, circle rate validation, and litigation clearance.',
+    jurisdiction: {
+      scope: 'district',
+      scopeCode: 'AP-KUR',
+      stateCode: 'AP',
+      districtCode: 'KUR',
+      label: 'District: Kurnool (AP-KUR)',
+    },
+    categoryGroup: 'National & Technical',
   },
   {
     id: 'finance_officer',
@@ -351,15 +769,23 @@ const stakeholderPersonas: StakeholderPersona[] = [
     role: 'Finance Officer',
     ehrmsRole: 'FINANCE_OFFICER',
     dashboardRoute: '/dashboard/finance',
-    title: 'Finance Officer',
+    title: 'Finance Officer (Kurnool, AP)',
     subtitle: 'Finance Department / PFMS Division',
     name: 'Ravi Kumar',
     designation: 'Finance Officer',
-    department: 'Finance Department',
+    department: 'Finance Department (Kurnool)',
     badge: 'FINANCE OFFICER [EMP004]',
     icon: 'currency',
     color: '#286343',
     description: 'Compensation requests processing, PFMS DBT direct benefit transfer payment tracking, and statutory 100% Solatium awards.',
+    jurisdiction: {
+      scope: 'district',
+      scopeCode: 'AP-KUR',
+      stateCode: 'AP',
+      districtCode: 'KUR',
+      label: 'District: Kurnool (AP-KUR)',
+    },
+    categoryGroup: 'National & Technical',
   },
   {
     id: 'rehabilitation_officer',
@@ -367,61 +793,23 @@ const stakeholderPersonas: StakeholderPersona[] = [
     role: 'Rehabilitation Officer',
     ehrmsRole: 'REHABILITATION_OFFICER',
     dashboardRoute: '/dashboard/rehabilitation',
-    title: 'Rehabilitation Officer',
+    title: 'Rehabilitation Officer (Kurnool, AP)',
     subtitle: 'R&R Department / Resettlement Wing',
     name: 'Suresh Patel',
     designation: 'Rehabilitation Officer',
-    department: 'R&R Department',
+    department: 'R&R Department (Kurnool)',
     badge: 'REHABILITATION [EMP005]',
     icon: 'home',
     color: '#705335',
     description: 'Affected families census tracking, R&R resettlement progress monitoring, and rehabilitation housing status.',
-  },
-  {
-    id: 'land_owner',
-    role: 'Land Owner',
-    dashboardRoute: '/dashboard/landowner',
-    title: 'Land Owner / Citizen',
-    subtitle: 'Citizen Transparency Portal',
-    name: 'Suresh Kumar / Meera Devi',
-    designation: 'Citizen Landowner (Survey #1042)',
-    department: 'Public Transparency Desk',
-    badge: 'CITIZEN DESK',
-    icon: 'people',
-    color: '#416353',
-    description: 'Citizen land parcel status tracking, survey lookup, Section 11 gazette notification viewer, and Section 15 objection filing.',
-  },
-  {
-    id: 'requiring_body',
-    employeeId: 'EMP006',
-    role: 'Land Requiring Body',
-    ehrmsRole: 'LAND_REQUIRING_BODY',
-    dashboardRoute: '/dashboard/requiring-body',
-    title: 'Land Requiring Body',
-    subtitle: 'Land Requiring Body (NHAI)',
-    name: 'Praveen Singhal',
-    designation: 'Chief Project Officer',
-    department: 'Land Requiring Body (NHAI)',
-    badge: 'REQ BODY [EMP006]',
-    icon: 'building',
-    color: '#91723e',
-    description: 'Initiate land acquisition proposal, upload DPR feasibility reports, and track statutory progress.',
-  },
-  {
-    id: 'government_dashboard',
-    employeeId: 'EMP010',
-    role: 'Government Reviewer',
-    ehrmsRole: 'GOVERNMENT_REVIEWER',
-    dashboardRoute: '/dashboard/government',
-    title: 'Government Reviewer',
-    subtitle: 'Appropriate Government / Oversight',
-    name: 'Meenakshi Sundaram',
-    designation: 'Joint Secretary / Reviewer',
-    department: 'Appropriate Government / Oversight',
-    badge: 'REVIEWER [EMP010]',
-    icon: 'shield',
-    color: '#10251f',
-    description: 'National overview across 18 states, AI delay risk prediction, cryptographic audit ledger, and workflow regimes.',
+    jurisdiction: {
+      scope: 'district',
+      scopeCode: 'AP-KUR',
+      stateCode: 'AP',
+      districtCode: 'KUR',
+      label: 'District: Kurnool (AP-KUR)',
+    },
+    categoryGroup: 'National & Technical',
   },
 ]
 
@@ -851,6 +1239,26 @@ export default function App() {
       return true
     })
   }, [notices])
+  // Multi-Stakeholder Jurisdictional Isolation:
+  // - State cannot see another State
+  // - District cannot see another District
+  // - Local Body cannot see another Local Body, nor upper authority strategic dossiers
+  // - Requiring Body cannot see another Requiring Body's internal pipeline
+  // - Citizen cannot see other citizens' private awards
+  const visibleProjects = useMemo(() => {
+    return filterProjectsByJurisdiction(projects, activePersona.jurisdiction)
+  }, [projects, activePersona.jurisdiction])
+
+  // Automatically select an in-jurisdiction project when persona or visible projects change
+  useEffect(() => {
+    if (visibleProjects.length > 0) {
+      if (!visibleProjects.some((p) => p.id === selected.id)) {
+        setSelected(visibleProjects[0])
+        setCurrentStageIdx(0)
+      }
+    }
+  }, [visibleProjects, selected.id])
+
   const [loading, setLoading] = useState(false)
   const [toastMessage, setToastMessage] = useState<string | null>(null)
   const [backendError, setBackendError] = useState(false)
@@ -860,18 +1268,21 @@ export default function App() {
     apiClient.getProjects().then((apiProjs) => {
       if (!apiProjs || apiProjs.length === 0) return
       
-      const mapped = apiProjs.map(p => ({
+      const mapped: Project[] = apiProjs.map(p => ({
         id: p.id,
         name: p.name,
         code: `PRJ-${p.id.substring(0, 6).toUpperCase()}`,
         location: `${p.district_code} · ${p.state_code}`,
+        state_code: p.state_code,
+        district_code: p.district_code,
+        requiring_body: p.name.includes('Petroleum') ? 'HPCL' : p.name.includes('Freight') ? 'DFCCIL' : p.name.includes('Solar') ? 'APGENCO' : p.name.includes('Amaravati') ? 'APCRDA' : 'NHAI',
         parcels: p.parcels?.length || 0,
         acquired: 0,
         stage: (p.stage || 'Proposal Creation') as any,
         stageIndex: 0,
         status: 'On track' as const,
         due: '30 Nov 2026',
-        owner: 'National Highways Authority',
+        owner: p.name.includes('Petroleum') ? 'HPCL' : p.name.includes('Freight') ? 'DFCCIL' : p.name.includes('Solar') ? 'APGENCO' : p.name.includes('Amaravati') ? 'APCRDA' : 'NHAI',
         amount: '₹240 Cr'
       }))
       setProjects(mapped)
@@ -1410,28 +1821,42 @@ export default function App() {
       const currentAuthorizedPersonaId = stageToPersonaMap[currentStageIdx]
       if (
         activePersona?.id === currentAuthorizedPersonaId ||
-        activePersona?.id === 'collector' ||
+        activePersona?.id.startsWith('collector') ||
         activePersona?.id === 'additional_collector' ||
-        activePersona?.id === 'government_dashboard'
+        activePersona?.id === 'government_dashboard' ||
+        activePersona?.id.startsWith('state_')
       ) {
         return true
       }
     }
 
+    const getPersonaKey = (p?: StakeholderPersona): string => {
+      if (!p) return ''
+      if (p.id.startsWith('collector')) return 'collector'
+      if (p.id.startsWith('state_')) return 'state_authority'
+      if (p.id.startsWith('local_')) return 'local_body'
+      if (p.id.startsWith('req_')) return 'requiring_body'
+      if (p.id.startsWith('citizen_')) return 'land_owner'
+      return p.id
+    }
+
     const personaPerms: Record<string, string[]> = {
-      collector: ['transition_projects', 'compensation.calculate', 'objection.review', 'hearing.conduct', 'possession.initiate', 'award.approve', 'notification.issue', 'document.approve', 'workflow.reject', 'view_projects', 'view_parcels', 'view_owners', 'view_audit'],
+      collector: ['transition_projects', 'create_projects', 'project.create', 'compensation.calculate', 'objection.review', 'hearing.conduct', 'possession.initiate', 'award.approve', 'notification.issue', 'document.approve', 'workflow.reject', 'view_projects', 'view_parcels', 'view_owners', 'view_audit'],
       additional_collector: ['transition_projects', 'declaration.prepare', 'award.review', 'document.review', 'view_projects', 'view_parcels'],
       revenue_officer: ['transition_projects', 'parcel.verify', 'document.upload', 'view_projects', 'view_parcels', 'view_owners'],
+      local_body: ['view_projects', 'view_parcels', 'parcel.verify', 'document.upload', 'hearing.conduct', 'view_owners'],
       gis_surveyor: ['parcel.verify', 'parcel.geometry.edit', 'document.upload', 'view_parcels'],
       sia_officer: ['transition_projects', 'sia.create', 'document.upload', 'view_projects', 'view_parcels'],
       legal_officer: ['transition_projects', 'deposit.create', 'deposit.release', 'litigation.manage', 'document.review', 'view_audit', 'view_projects', 'view_parcels'],
-      finance_officer: ['transition_projects', 'payment.initiate', 'payment.approve', 'view_projects', 'view_parcels'],
+      finance_officer: ['transition_projects', 'payment.initiate', 'payment.approve', 'compensation.calculate', 'view_projects', 'view_parcels'],
       rehabilitation_officer: ['transition_projects', 'rr.manage', 'document.upload', 'view_projects', 'view_parcels'],
-      requiring_body: ['transition_projects', 'project.create', 'document.upload', 'view_projects', 'view_parcels'],
+      requiring_body: ['transition_projects', 'create_projects', 'project.create', 'document.upload', 'view_projects', 'view_parcels', 'analytics.view'],
+      state_authority: ['transition_projects', 'analytics.view', 'view_audit', 'national.dashboard.view', 'declaration.approve', 'view_projects'],
       government_dashboard: ['transition_projects', 'analytics.view', 'view_audit', 'national.dashboard.view', 'declaration.approve', 'view_projects'],
       land_owner: ['objection.submit', 'submit_grievances', 'view_parcels'],
     }
-    const perms = personaPerms[activePersona?.id || ''] || []
+    const key = getPersonaKey(activePersona)
+    const perms = personaPerms[key] || personaPerms[activePersona?.id || ''] || []
     return perms.includes(perm)
   }
 
@@ -1572,6 +1997,10 @@ export default function App() {
 
   // Handle Create Project
   const handleCreateProject = async () => {
+    if (!canInitiateAcquisitionProposal(activePersona.id, activePersona.role)) {
+      showToast('Action Denied: Only authorized Land Requiring Bodies (PIA) or CALA/Collectors can initiate acquisition project proposals.')
+      return
+    }
     if (!newProjectName.trim()) {
       showToast('Please enter a project name')
       return
@@ -2104,8 +2533,8 @@ export default function App() {
               })
             )
           })()}
-          {/* Always-available workspace tools - Gated by Role Matrix per Master PDF */}
-          {(can('create_projects') || can('project.create')) && !isLandOwnerRole(activePersona.id) && (
+          {/* Always-available workspace tools - Strictly gated to Land Requiring Bodies (PIA) and District Collectors */}
+          {canInitiateAcquisitionProposal(activePersona.id, activePersona.role) && (
             <button className="nav-link" onClick={() => setShowCreateModal(true)}>
               <Icon name="plus" />
               <span>New Acquisition Project</span>
@@ -2224,9 +2653,32 @@ export default function App() {
                   </>
                 ) : (
                   <>
-                    <strong style={{ display: 'block', lineHeight: 1.1 }}>
-                      {resolvePersonaName(activePersona)}
-                    </strong>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <strong style={{ display: 'block', lineHeight: 1.1 }}>
+                        {resolvePersonaName(activePersona)}
+                      </strong>
+                      {activePersona.jurisdiction && (
+                        <span
+                          title={`Jurisdictional Scope: ${activePersona.jurisdiction.scope.toUpperCase()} - ${activePersona.jurisdiction.label}`}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 3,
+                            padding: '2px 7px',
+                            background: 'rgba(0, 237, 100, 0.12)',
+                            border: '1px solid rgba(0, 237, 100, 0.35)',
+                            borderRadius: 12,
+                            fontSize: 10,
+                            fontWeight: 700,
+                            color: '#00ed64',
+                            letterSpacing: '0.04em',
+                            fontFamily: 'DM Mono, monospace',
+                          }}
+                        >
+                          🔒 {activePersona.jurisdiction.label}
+                        </span>
+                      )}
+                    </div>
                     <small style={{ color: '#a0b5ab', fontSize: 10 }}>
                       {activePersona.title} ({resolvePersonaDepartment(activePersona)})
                     </small>
@@ -2235,7 +2687,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* Quick Switch Role */}
+            {/* Quick Switch Role with Optgroups by Jurisdiction Tier */}
             <select
               value={activePersona.id}
               onChange={(e) => {
@@ -2252,11 +2704,28 @@ export default function App() {
                 fontWeight: 600,
               }}
             >
-              {stakeholderPersonas.map((p) => (
-                <option key={p.id} value={p.id}>
-                  Switch: {p.title}
-                </option>
-              ))}
+              {[
+                'Collectors',
+                'State Governments',
+                'Local Bodies',
+                'Requiring Bodies',
+                'Citizen Landowners',
+                'National & Technical',
+              ].map((group) => {
+                const groupPersonas = stakeholderPersonas.filter(
+                  (p) => (p as any).categoryGroup === group
+                )
+                if (groupPersonas.length === 0) return null
+                return (
+                  <optgroup key={group} label={`── ${group.toUpperCase()} ──`}>
+                    {groupPersonas.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.title} ({p.name})
+                      </option>
+                    ))}
+                  </optgroup>
+                )
+              })}
             </select>
 
             {/* Notification Bell with Badge & Dropdown */}
@@ -2389,7 +2858,7 @@ export default function App() {
             <CategoryViews
               activeCategory={activeCategory}
               onSelectCategory={(cat) => setActiveCategory(cat)}
-              projects={projects}
+              projects={visibleProjects}
               selected={selected}
               onSelectProject={(p) => {
                 setSelected(p)
@@ -2452,7 +2921,7 @@ export default function App() {
             {(() => {
               // Compute role-specific KPIs using the RBAC layer
               const roleKpis = roleKpiCards(activePersona.id, {
-                projectCount: projects.length,
+                projectCount: visibleProjects.length,
                 pendingTasks: meTasks.length || myTasks.length,
                 overdueTasks: (meTasks.length > 0 ? meTasks : myTasks).filter((t: any) => t.is_overdue).length,
               })
@@ -2512,7 +2981,7 @@ export default function App() {
                   </p>
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
-                  {activePersona.id === 'requiring_body' && can('project.create') && (
+                  {canInitiateAcquisitionProposal(activePersona.id, activePersona.role) && (
                     <button className="primary-button" onClick={() => setShowCreateModal(true)}>
                       + New Project Proposal
                     </button>
@@ -2724,11 +3193,11 @@ export default function App() {
                   <div className="role-card-grid">
                     <div className="role-item-card">
                       <h4>
-                        <span>Active Projects (42)</span>
+                        <span>Active Projects ({visibleProjects.length})</span>
                         <span className="badge-success">● LIVE</span>
                       </h4>
                       <div style={{ fontSize: 11, color: '#52695c', display: 'grid', gap: 6 }}>
-                        {projects.slice(0, 3).map((p) => (
+                        {visibleProjects.slice(0, 3).map((p) => (
                           <div
                             key={p.id}
                             style={{

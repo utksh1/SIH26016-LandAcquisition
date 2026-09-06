@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import type { StatutoryStageItem, StakeholderPersona } from '../App'
 import type { Project, MyTaskItem } from '../api/client'
-import { isCategoryAllowedForRole, getCategoryRestrictionReason } from '../rbac'
+import { isCategoryAllowedForRole, getCategoryRestrictionReason, filterParcelsByJurisdiction } from '../rbac'
 
 export interface CategoryViewsProps {
   activeCategory: string
@@ -78,13 +78,18 @@ export function CategoryViews({
   const [newObjectionSurvey, setNewObjectionSurvey] = useState('BH-48-1042')
   const [newObjectionGround, setNewObjectionGround] = useState('Inadequate Market Valuation (Sec 26)')
 
-  // Sample Cadastral Parcels database
-  const cadastralParcels = [
+  // Multi-District & Multi-Owner Cadastral Parcels database with strict jurisdictional isolation
+  const allCadastralParcels = [
+    // --- Kurnool District (AP-KUR) ---
     {
       id: 'PARCEL-1042',
-      survey: 'BH-48-1042',
-      ulpin: '14081042-2026-RAJ',
-      owner: 'Asha Devi w/o Ram Lal',
+      survey: 'AP-KUR-1042',
+      survey_number: 'AP-KUR-1042',
+      district_code: 'KUR',
+      state_code: 'AP',
+      owner_id: 'CITIZEN-AP-01',
+      ulpin: '29000000000021',
+      owner: 'Rameshwar Sharma',
       areaHa: 1.25,
       areaBigha: 4.88,
       soil: 'Chahi-1 (Irrigated Double Crop)',
@@ -95,13 +100,17 @@ export function CategoryViews({
       dbtStatus: 'Disbursed',
       utr: 'PFMS202688419201',
       encumbrance: 'Nil (Clean Title)',
-      coordinates: '27.2170° N, 77.4895° E',
+      coordinates: '15.8250° N, 78.0350° E',
     },
     {
       id: 'PARCEL-1043',
-      survey: 'BH-48-1043',
-      ulpin: '14081043-2026-RAJ',
-      owner: 'Manoj Kumar Sharma & Brothers',
+      survey: 'AP-KUR-1043',
+      survey_number: 'AP-KUR-1043',
+      district_code: 'KUR',
+      state_code: 'AP',
+      owner_id: 'CITIZEN-AP-01',
+      ulpin: '29000000000022',
+      owner: 'Rameshwar Sharma & Brothers',
       areaHa: 2.10,
       areaBigha: 8.20,
       soil: 'Barani (Unirrigated Arable)',
@@ -112,43 +121,118 @@ export function CategoryViews({
       dbtStatus: 'Pending Escrow',
       utr: 'Pending Sec 77 Deposit',
       encumbrance: 'Partition Suit Pending (OS 42/2025)',
-      coordinates: '27.2185° N, 77.4912° E',
+      coordinates: '15.8280° N, 78.0410° E',
     },
     {
       id: 'PARCEL-1044',
-      survey: 'BH-48-1044',
-      ulpin: '14081044-2026-RAJ',
+      survey: 'KPL/2026/SN-114/7',
+      survey_number: 'KPL/2026/SN-114/7',
+      district_code: 'KUR',
+      state_code: 'AP',
+      ulpin: '29000000000023',
       owner: 'Gram Panchayat Common Pasture (Gauchar)',
-      areaHa: 0.85,
-      areaBigha: 3.32,
+      areaHa: 6.40,
+      areaBigha: 24.96,
       soil: 'Gauchar / Community Land',
       status: 'Verified',
       marketRate: '₹28,00,000 / ha',
-      grossAward: '₹53,55,000',
-      solatium: '₹17,85,000',
+      grossAward: '₹4,03,20,000',
+      solatium: '₹1,34,40,000',
       dbtStatus: 'Deposited in Authority',
       utr: 'PFMS202688419288',
       encumbrance: 'Gram Sabha Resolution Passed',
-      coordinates: '27.2198° N, 77.4930° E',
+      coordinates: '15.8300° N, 78.0500° E',
+    },
+
+    // --- Mahabubnagar District (TS-MBN) ---
+    {
+      id: 'PARCEL-2041',
+      survey: 'TS-MBN-2026/SN-2041',
+      survey_number: 'TS-MBN-2026/SN-2041',
+      district_code: 'MBN',
+      state_code: 'TS',
+      owner_id: 'CITIZEN-TS-01',
+      ulpin: '36000000000021',
+      owner: 'Sunita Devi w/o Late Venkat Rao',
+      areaHa: 8.20,
+      areaBigha: 32.00,
+      soil: 'Black Cotton (Semi-Arid Commercial)',
+      status: 'Verified',
+      marketRate: '₹48,00,000 / ha',
+      grossAward: '₹7,87,20,000',
+      solatium: '₹2,62,40,000',
+      dbtStatus: 'Disbursed',
+      utr: 'PFMS202699318210',
+      encumbrance: 'Nil (Clean Title)',
+      coordinates: '16.7450° N, 78.0050° E',
     },
     {
-      id: 'PARCEL-1045',
-      survey: 'BH-48-1045',
-      ulpin: '14081045-2026-RAJ',
-      owner: 'Sukhvinder Singh s/o Gurdial Singh',
-      areaHa: 1.65,
-      areaBigha: 6.44,
-      soil: 'Chahi-2 (Tubewell Irrigated)',
+      id: 'PARCEL-2042',
+      survey: 'TS-MBN-2026/SN-2042',
+      survey_number: 'TS-MBN-2026/SN-2042',
+      district_code: 'MBN',
+      state_code: 'TS',
+      ulpin: '36000000000022',
+      owner: 'Jadcherla Industrial Development Cooperative',
+      areaHa: 12.50,
+      areaBigha: 48.75,
+      soil: 'Commercial Wet Land',
+      status: 'Under Scrutiny',
+      marketRate: '₹52,00,000 / ha',
+      grossAward: '₹13,00,00,000',
+      solatium: '₹4,33,33,333',
+      dbtStatus: 'Pending Escrow',
+      utr: 'Pending Approval',
+      encumbrance: 'Consent Deed Pending Verification',
+      coordinates: '16.7510° N, 78.0120° E',
+    },
+
+    // --- Varanasi District (UP-VNS) ---
+    {
+      id: 'PARCEL-3012',
+      survey: 'UP-VNS-2026/SN-3012',
+      survey_number: 'UP-VNS-2026/SN-3012',
+      district_code: 'VNS',
+      state_code: 'UP',
+      owner_id: 'CITIZEN-UP-01',
+      ulpin: '09000000000031',
+      owner: 'Vikram Singh s/o R. P. Singh',
+      areaHa: 14.50,
+      areaBigha: 56.55,
+      soil: 'Alluvial Ganga Basin (Multi-Crop)',
       status: 'Verified',
-      marketRate: '₹40,00,000 / ha',
-      grossAward: '₹1,48,50,000',
-      solatium: '₹49,50,000',
+      marketRate: '₹62,00,000 / ha',
+      grossAward: '₹17,98,00,000',
+      solatium: '₹5,99,33,333',
       dbtStatus: 'Disbursed',
-      utr: 'PFMS202688419310',
+      utr: 'PFMS202677109244',
       encumbrance: 'Nil (Clean Title)',
-      coordinates: '27.2210° N, 77.4948° E',
+      coordinates: '25.3200° N, 82.9800° E',
+    },
+    {
+      id: 'PARCEL-3013',
+      survey: 'UP-VNS-2026/SN-3013',
+      survey_number: 'UP-VNS-2026/SN-3013',
+      district_code: 'VNS',
+      state_code: 'UP',
+      ulpin: '09000000000032',
+      owner: 'Kashi Agro Producers Society',
+      areaHa: 5.10,
+      areaBigha: 19.89,
+      soil: 'Irrigated Fertile Loam',
+      status: 'Verified',
+      marketRate: '₹58,00,000 / ha',
+      grossAward: '₹5,91,60,000',
+      solatium: '₹1,97,20,000',
+      dbtStatus: 'Deposited in Authority',
+      utr: 'PFMS202677109299',
+      encumbrance: 'Section 77(2) Judicial Escrow Deposited',
+      coordinates: '25.3250° N, 82.9850° E',
     },
   ]
+
+  // Filter parcels according to active persona's jurisdictional boundary
+  const cadastralParcels = filterParcelsByJurisdiction(allCadastralParcels, activePersona.jurisdiction)
 
   // Sample Objections Registry
   const objectionsData = [
@@ -1175,70 +1259,72 @@ export function CategoryViews({
           `${objectionsData.length} Active Petitions`
         )}
 
-        {/* Action / File Objection Form */}
-        <div style={{ background: '#ffffff', border: '1px solid #e1e5e8', borderRadius: 12, padding: 20, marginBottom: 20 }}>
-          <h3 style={{ margin: '0 0 12px', fontSize: 16, color: '#001e2b' }}>
-            Record New Section 15 Objection Petition
-          </h3>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.5fr auto', gap: 12, alignItems: 'flex-end' }}>
-            <div>
-              <label style={{ fontSize: 11, fontWeight: 600, color: '#5c6c7a' }}>Landowner Name</label>
-              <input
-                type="text"
-                value={newObjectionName}
-                onChange={(e) => setNewObjectionName(e.target.value)}
-                placeholder="e.g. Ramesh Chandra"
-                style={{ width: '100%', height: 36, padding: '0 10px', borderRadius: 6, border: '1px solid #c1ccd6', fontSize: 12, marginTop: 4 }}
-              />
-            </div>
-            <div>
-              <label style={{ fontSize: 11, fontWeight: 600, color: '#5c6c7a' }}>Survey / Khasra Number</label>
-              <input
-                type="text"
-                value={newObjectionSurvey}
-                onChange={(e) => setNewObjectionSurvey(e.target.value)}
-                placeholder="BH-48-1042"
-                style={{ width: '100%', height: 36, padding: '0 10px', borderRadius: 6, border: '1px solid #c1ccd6', fontSize: 12, marginTop: 4 }}
-              />
-            </div>
-            <div>
-              <label style={{ fontSize: 11, fontWeight: 600, color: '#5c6c7a' }}>Ground of Objection</label>
-              <select
-                value={newObjectionGround}
-                onChange={(e) => setNewObjectionGround(e.target.value)}
-                style={{ width: '100%', height: 36, padding: '0 10px', borderRadius: 6, border: '1px solid #c1ccd6', fontSize: 12, marginTop: 4 }}
+        {/* Action / File Objection Form - Only for Citizen Landowners or Authorized Officers */}
+        {can('objection.submit') && (
+          <div style={{ background: '#ffffff', border: '1px solid #e1e5e8', borderRadius: 12, padding: 20, marginBottom: 20 }}>
+            <h3 style={{ margin: '0 0 12px', fontSize: 16, color: '#001e2b' }}>
+              Record New Section 15 Objection Petition
+            </h3>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.5fr auto', gap: 12, alignItems: 'flex-end' }}>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 600, color: '#5c6c7a' }}>Landowner Name</label>
+                <input
+                  type="text"
+                  value={newObjectionName}
+                  onChange={(e) => setNewObjectionName(e.target.value)}
+                  placeholder="e.g. Ramesh Chandra"
+                  style={{ width: '100%', height: 36, padding: '0 10px', borderRadius: 6, border: '1px solid #c1ccd6', fontSize: 12, marginTop: 4 }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 600, color: '#5c6c7a' }}>Survey / Khasra Number</label>
+                <input
+                  type="text"
+                  value={newObjectionSurvey}
+                  onChange={(e) => setNewObjectionSurvey(e.target.value)}
+                  placeholder="BH-48-1042"
+                  style={{ width: '100%', height: 36, padding: '0 10px', borderRadius: 6, border: '1px solid #c1ccd6', fontSize: 12, marginTop: 4 }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 600, color: '#5c6c7a' }}>Ground of Objection</label>
+                <select
+                  value={newObjectionGround}
+                  onChange={(e) => setNewObjectionGround(e.target.value)}
+                  style={{ width: '100%', height: 36, padding: '0 10px', borderRadius: 6, border: '1px solid #c1ccd6', fontSize: 12, marginTop: 4 }}
+                >
+                  <option>Inadequate Market Valuation (Sec 26)</option>
+                  <option>Corridor Alignment Bisects Farm/Tubewell</option>
+                  <option>Exclusion of Affected Family from R&R Scheme</option>
+                  <option>Joint Ownership & Apportionment Dispute (Sec 29)</option>
+                </select>
+              </div>
+              <button
+                onClick={() => {
+                  if (!newObjectionName.trim()) {
+                    showToast('Please enter landowner name')
+                    return
+                  }
+                  showToast(`Section 15 Objection filed for ${newObjectionName}! Case ticket generated.`)
+                  setNewObjectionName('')
+                }}
+                style={{
+                  background: '#001e2b',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: 9999,
+                  padding: '0 20px',
+                  height: 36,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
               >
-                <option>Inadequate Market Valuation (Sec 26)</option>
-                <option>Corridor Alignment Bisects Farm/Tubewell</option>
-                <option>Exclusion of Affected Family from R&R Scheme</option>
-                <option>Joint Ownership & Apportionment Dispute (Sec 29)</option>
-              </select>
+                + File Petition
+              </button>
             </div>
-            <button
-              onClick={() => {
-                if (!newObjectionName.trim()) {
-                  showToast('Please enter landowner name')
-                  return
-                }
-                showToast(`Section 15 Objection filed for ${newObjectionName}! Case ticket generated.`)
-                setNewObjectionName('')
-              }}
-              style={{
-                background: '#001e2b',
-                color: '#ffffff',
-                border: 'none',
-                borderRadius: 9999,
-                padding: '0 20px',
-                height: 36,
-                fontSize: 12,
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
-            >
-              + File Petition
-            </button>
           </div>
-        </div>
+        )}
 
         {/* Objections List */}
         <div style={{ display: 'grid', gap: 14 }}>
@@ -1631,70 +1717,76 @@ export function CategoryViews({
                   style={{ width: '100%', height: 38, padding: '0 10px', borderRadius: 8, border: '1px solid #c1ccd6', fontSize: 13, marginTop: 4 }}
                 />
               </div>
-              <button
-                onClick={onPfmsDisburse}
-                disabled={pfmsLoading}
-                style={{
-                  background: '#00ed64',
-                  color: '#001e2b',
-                  border: 'none',
-                  borderRadius: 9999,
-                  padding: '12px 0',
-                  fontSize: 13,
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  marginTop: 8,
-                }}
-              >
-                {pfmsLoading ? 'Executing PFMS Direct Transfer...' : 'Disburse via PFMS DBT ➔'}
-              </button>
-            </div>
-          </div>
-
-          {/* PFMS Receipts Ledger */}
-          <div style={{ background: '#ffffff', border: '1px solid #e1e5e8', borderRadius: 12, padding: 20 }}>
-            <h3 style={{ margin: '0 0 14px', fontSize: 16, color: '#001e2b' }}>
-              Latest PFMS Disbursement Transactions
-            </h3>
-            {pfmsResult ? (
-              <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: 16, marginBottom: 14, fontSize: 13 }}>
-                <span style={{ font: '700 11px "DM Mono"', color: '#166534' }}>LATEST TRANSACTION RECEIPT</span>
-                <div style={{ fontSize: 18, fontWeight: 700, color: '#14532d', margin: '4px 0' }}>
-                  UTR: {pfmsResult.utr_number}
+              {can('payment.initiate') || can('payment.approve') ? (
+                <button
+                  onClick={onPfmsDisburse}
+                  disabled={pfmsLoading}
+                  style={{
+                    background: '#00ed64',
+                    color: '#001e2b',
+                    border: 'none',
+                    borderRadius: 9999,
+                    padding: '12px 0',
+                    fontSize: 13,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    marginTop: 8,
+                  }}
+                >
+                  {pfmsLoading ? 'Executing PFMS Direct Transfer...' : 'Disburse via PFMS DBT ➔'}
+                </button>
+              ) : (
+                <div style={{ padding: '10px 14px', background: '#f8faf6', border: '1px solid #ced6cb', borderRadius: 8, fontSize: 12, color: '#4f6859', marginTop: 8 }}>
+                  🔒 <strong>Segregation of Duties (§25):</strong> PFMS DBT fund transfers can only be executed by an authorized <strong>Finance Officer</strong>. Your role has read-only clearance audit access.
                 </div>
-                <div style={{ fontSize: 12, color: '#15803d' }}>
-                  Amount: ₹{Number(pfmsResult.amount_inr || 0).toLocaleString('en-IN')} · Beneficiary: {pfmsResult.reference}
-                </div>
-              </div>
-            ) : null}
-
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, textAlign: 'left' }}>
-              <thead>
-                <tr style={{ background: '#f4f7f6', borderBottom: '1px solid #e1e5e8', font: '600 10px "DM Mono"' }}>
-                  <th style={{ padding: '8px 10px' }}>UTR NUMBER</th>
-                  <th style={{ padding: '8px 10px' }}>BENEFICIARY</th>
-                  <th style={{ padding: '8px 10px' }}>AMOUNT</th>
-                  <th style={{ padding: '8px 10px' }}>STATUS</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr style={{ borderBottom: '1px solid #eceff1' }}>
-                  <td style={{ padding: '8px 10px', fontFamily: 'DM Mono' }}>PFMS202688419201</td>
-                  <td style={{ padding: '8px 10px' }}>Asha Devi (Survey #1042)</td>
-                  <td style={{ padding: '8px 10px', fontWeight: 600 }}>₹24,50,000</td>
-                  <td style={{ padding: '8px 10px', color: '#00b545', fontWeight: 600 }}>SUCCESS</td>
-                </tr>
-                <tr style={{ borderBottom: '1px solid #eceff1' }}>
-                  <td style={{ padding: '8px 10px', fontFamily: 'DM Mono' }}>PFMS202688419288</td>
-                  <td style={{ padding: '8px 10px' }}>Sukhvinder Singh (Survey #1045)</td>
-                  <td style={{ padding: '8px 10px', fontWeight: 600 }}>₹1,48,50,000</td>
-                  <td style={{ padding: '8px 10px', color: '#00b545', fontWeight: 600 }}>SUCCESS</td>
-                </tr>
-              </tbody>
-            </table>
+              )}
           </div>
         </div>
+
+        {/* PFMS Receipts Ledger */}
+        <div style={{ background: '#ffffff', border: '1px solid #e1e5e8', borderRadius: 12, padding: 20 }}>
+          <h3 style={{ margin: '0 0 14px', fontSize: 16, color: '#001e2b' }}>
+            Latest PFMS Disbursement Transactions
+          </h3>
+          {pfmsResult ? (
+            <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: 16, marginBottom: 14, fontSize: 13 }}>
+              <span style={{ font: '700 11px "DM Mono"', color: '#166534' }}>LATEST TRANSACTION RECEIPT</span>
+              <div style={{ fontSize: 18, fontWeight: 700, color: '#14532d', margin: '4px 0' }}>
+                UTR: {pfmsResult.utr_number}
+              </div>
+              <div style={{ fontSize: 12, color: '#15803d' }}>
+                Amount: ₹{Number(pfmsResult.amount_inr || 0).toLocaleString('en-IN')} · Beneficiary: {pfmsResult.reference}
+              </div>
+            </div>
+          ) : null}
+
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, textAlign: 'left' }}>
+            <thead>
+              <tr style={{ background: '#f4f7f6', borderBottom: '1px solid #e1e5e8', font: '600 10px "DM Mono"' }}>
+                <th style={{ padding: '8px 10px' }}>UTR NUMBER</th>
+                <th style={{ padding: '8px 10px' }}>BENEFICIARY</th>
+                <th style={{ padding: '8px 10px' }}>AMOUNT</th>
+                <th style={{ padding: '8px 10px' }}>STATUS</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style={{ borderBottom: '1px solid #eceff1' }}>
+                <td style={{ padding: '8px 10px', fontFamily: 'DM Mono' }}>PFMS202688419201</td>
+                <td style={{ padding: '8px 10px' }}>Asha Devi (Survey #1042)</td>
+                <td style={{ padding: '8px 10px', fontWeight: 600 }}>₹24,50,000</td>
+                <td style={{ padding: '8px 10px', color: '#00b545', fontWeight: 600 }}>SUCCESS</td>
+              </tr>
+              <tr style={{ borderBottom: '1px solid #eceff1' }}>
+                <td style={{ padding: '8px 10px', fontFamily: 'DM Mono' }}>PFMS202688419288</td>
+                <td style={{ padding: '8px 10px' }}>Sukhvinder Singh (Survey #1045)</td>
+                <td style={{ padding: '8px 10px', fontWeight: 600 }}>₹1,48,50,000</td>
+                <td style={{ padding: '8px 10px', color: '#00b545', fontWeight: 600 }}>SUCCESS</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
+      </div >
     )
   }
 
@@ -1753,24 +1845,30 @@ export function CategoryViews({
             <p style={{ fontSize: 13, color: '#5c6c7a', lineHeight: 1.4, margin: '0 0 14px' }}>
               Execution of physical possession panchnama in presence of 5 independent panch witnesses, Executive Magistrate, and Requiring Body representatives.
             </p>
-            <button
-              onClick={() => {
-                showToast('Section 38 Possession Panchnama & Handover Certificate executed with DSC token!')
-              }}
-              style={{
-                width: '100%',
-                background: '#001e2b',
-                color: '#ffffff',
-                border: 'none',
-                borderRadius: 9999,
-                padding: '12px 0',
-                fontSize: 13,
-                fontWeight: 700,
-                cursor: 'pointer',
-              }}
-            >
-              Sign Panchnama & Handover Certificate (DSC) ➔
-            </button>
+            {can('possession.initiate') ? (
+              <button
+                onClick={() => {
+                  showToast('Section 38 Possession Panchnama & Handover Certificate executed with DSC token!')
+                }}
+                style={{
+                  width: '100%',
+                  background: '#001e2b',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: 9999,
+                  padding: '12px 0',
+                  fontSize: 13,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                Sign Panchnama & Handover Certificate (DSC) ➔
+              </button>
+            ) : (
+              <div style={{ padding: '12px 14px', background: '#f8faf6', border: '1px solid #ced6cb', borderRadius: 8, fontSize: 12, color: '#4f6859' }}>
+                🔒 <strong>Statutory Authority Restriction:</strong> Under RFCTLARR Act 2013 Section 38, physical possession of land can only be executed by the <strong>District Collector / Competent Authority (CALA)</strong>.
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -2367,28 +2465,28 @@ export function CategoryViews({
             {(auditEntries.length > 0
               ? auditEntries
               : [
-                  {
-                    action: 'POSSESSION_MEMO_EXECUTED',
-                    user_id: 'EMP001',
-                    created_at: '2026-09-06T09:30:00Z',
-                    entry_hash: '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08',
-                    previous_hash: '5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8',
-                  },
-                  {
-                    action: 'PFMS_DBT_DISBURSEMENT',
-                    user_id: 'EMP006',
-                    created_at: '2026-09-05T14:20:00Z',
-                    entry_hash: '5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8',
-                    previous_hash: '4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a',
-                  },
-                  {
-                    action: 'SECTION_23_AWARD_APPROVED',
-                    user_id: 'EMP001',
-                    created_at: '2026-09-04T11:15:00Z',
-                    entry_hash: '4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a',
-                    previous_hash: 'ef2d127de37b942baad06145e54b0c619a1f22327b2ebbcfbec78f5564afe39d',
-                  },
-                ]
+                {
+                  action: 'POSSESSION_MEMO_EXECUTED',
+                  user_id: 'EMP001',
+                  created_at: '2026-09-06T09:30:00Z',
+                  entry_hash: '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08',
+                  previous_hash: '5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8',
+                },
+                {
+                  action: 'PFMS_DBT_DISBURSEMENT',
+                  user_id: 'EMP006',
+                  created_at: '2026-09-05T14:20:00Z',
+                  entry_hash: '5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8',
+                  previous_hash: '4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a',
+                },
+                {
+                  action: 'SECTION_23_AWARD_APPROVED',
+                  user_id: 'EMP001',
+                  created_at: '2026-09-04T11:15:00Z',
+                  entry_hash: '4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a',
+                  previous_hash: 'ef2d127de37b942baad06145e54b0c619a1f22327b2ebbcfbec78f5564afe39d',
+                },
+              ]
             ).map((entry: any, i: number) => (
               <div
                 key={i}
@@ -2554,21 +2652,23 @@ export function CategoryViews({
             <h3 style={{ margin: 0, fontSize: 16, color: '#001e2b' }}>
               Public Hearings & Village Consultations Register
             </h3>
-            <button
-              onClick={() => showToast('New Section 5 Public Hearing notice issued to Panchayats')}
-              style={{
-                background: '#00ed64',
-                color: '#001e2b',
-                border: 'none',
-                borderRadius: 9999,
-                padding: '6px 14px',
-                fontSize: 12,
-                fontWeight: 700,
-                cursor: 'pointer',
-              }}
-            >
-              + Schedule Public Hearing
-            </button>
+            {can('sia.create') && (
+              <button
+                onClick={() => showToast('New Section 5 Public Hearing notice issued to Panchayats')}
+                style={{
+                  background: '#00ed64',
+                  color: '#001e2b',
+                  border: 'none',
+                  borderRadius: 9999,
+                  padding: '6px 14px',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                + Schedule Public Hearing
+              </button>
+            )}
           </div>
 
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, textAlign: 'left' }}>
@@ -2731,21 +2831,23 @@ export function CategoryViews({
             <h3 style={{ margin: 0, fontSize: 16, color: '#001e2b' }}>
               Authority Escrow Ledger (LARR Authority Reference Registry)
             </h3>
-            <button
-              onClick={() => showToast('New Section 77 Judicial Deposit order initiated')}
-              style={{
-                background: '#001e2b',
-                color: '#ffffff',
-                border: 'none',
-                borderRadius: 9999,
-                padding: '6px 14px',
-                fontSize: 12,
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
-            >
-              + Create Authority Deposit
-            </button>
+            {can('deposit.create') && (
+              <button
+                onClick={() => showToast('New Section 77 Judicial Deposit order initiated')}
+                style={{
+                  background: '#00ed64',
+                  color: '#001e2b',
+                  border: 'none',
+                  borderRadius: 9999,
+                  padding: '6px 14px',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                + Create Authority Deposit
+              </button>
+            )}
           </div>
 
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, textAlign: 'left' }}>

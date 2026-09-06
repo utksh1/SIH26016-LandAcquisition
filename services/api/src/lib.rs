@@ -5195,11 +5195,10 @@ fn require_permission(actor: &Actor, permission: Permission) -> Result<(), ApiEr
     Ok(())
 }
 
-fn authorize_create(actor: &Actor, state_code: &str, district_code: &str) -> Result<(), ApiError> {
+fn authorize_create(actor: &Actor, _state_code: &str, district_code: &str) -> Result<(), ApiError> {
     let allowed = match (&actor.role, &actor.jurisdiction) {
-        (Role::Admin | Role::LandRequiringBody | Role::GovernmentReviewer, Jurisdiction::National) => true,
+        (Role::Admin, _) => true,
         (Role::LandRequiringBody, _) => true,
-        (Role::RevenueOfficer, Jurisdiction::State { code }) => code == state_code,
         (Role::Collector | Role::AdditionalCollector, Jurisdiction::District { code }) => code == district_code,
         (
             Role::Collector,
@@ -5207,12 +5206,11 @@ fn authorize_create(actor: &Actor, state_code: &str, district_code: &str) -> Res
                 district_code: code,
             },
         ) => code == district_code,
-        (Role::LandOwner, Jurisdiction::Public) => false,
-        _ => actor.role != Role::LandOwner,
+        _ => false,
     };
     if !allowed {
         return Err(ApiError::Forbidden(
-            "actor jurisdiction does not permit creating this project".to_string(),
+            "Only an authorized Land Requiring Body or District Collector within jurisdiction can raise a land acquisition request".to_string(),
         ));
     }
     Ok(())

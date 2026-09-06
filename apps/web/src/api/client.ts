@@ -752,6 +752,10 @@ export interface Project {
   amount: string
   sector?: string
   acts_applicable?: string
+  state_code?: string
+  district_code?: string
+  requiring_body?: string
+  local_body_code?: string
 }
 
 export interface WorkflowStage {

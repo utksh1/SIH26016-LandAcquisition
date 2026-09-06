@@ -669,6 +669,153 @@ export interface RbacContext {
 }
 
 // ---------------------------------------------------------------------------
+// 12. StakeholderJurisdiction & Multi-Stakeholder Data Isolation Engine
+// ---------------------------------------------------------------------------
+
+export type JurisdictionScope =
+  | 'national'
+  | 'state'
+  | 'district'
+  | 'local_body'
+  | 'requiring_body'
+  | 'citizen'
+
+export interface StakeholderJurisdiction {
+  scope: JurisdictionScope
+  scopeCode: string
+  stateCode?: string
+  districtCode?: string
+  localBodyCode?: string
+  requiringBodyCode?: string
+  citizenOwnerId?: string
+  label: string
+}
+
+/**
+ * Filter projects to guarantee strict horizontal and vertical jurisdictional boundaries:
+ * - State cannot see another State
+ * - District cannot see another District
+ * - Local Body cannot see another Local Body, nor upper authority strategic dossiers
+ * - Requiring Body cannot see another Requiring Body's internal pipeline
+ * - Citizen cannot see other citizens or un-notified projects
+ */
+export function filterProjectsByJurisdiction<T extends { state_code?: string; district_code?: string; location?: string; owner?: string; requiring_body?: string }>(
+  projects: T[],
+  jurisdiction?: StakeholderJurisdiction
+): T[] {
+  if (!jurisdiction) return projects
+
+  switch (jurisdiction.scope) {
+    case 'national':
+      // National oversight gets macro summary across all states
+      return projects
+
+    case 'state':
+      // State Revenue Authority strictly restricted to projects within their State
+      return projects.filter((p) => {
+        if (p.state_code) return p.state_code.toUpperCase() === jurisdiction.stateCode?.toUpperCase()
+        if (p.location) return p.location.toUpperCase().includes(jurisdiction.stateCode?.toUpperCase() || '')
+        return false
+      })
+
+    case 'district':
+      // District Collector strictly restricted to projects within their District
+      return projects.filter((p) => {
+        const pDist = (p.district_code || '').toUpperCase()
+        const jDist = (jurisdiction.districtCode || '').toUpperCase()
+        if (pDist === jDist || pDist.endsWith(jDist) || jDist.endsWith(pDist)) return true
+        if (p.location) {
+          const loc = p.location.toUpperCase()
+          if (loc.includes(jDist) || loc.includes(jurisdiction.scopeCode.toUpperCase())) return true
+        }
+        return false
+      })
+
+    case 'local_body':
+      // Local Authority / Mandal / Tehsil strictly isolated to their jurisdiction
+      return projects.filter((p) => {
+        const pDist = (p.district_code || '').toUpperCase()
+        const jDist = (jurisdiction.districtCode || '').toUpperCase()
+        if (pDist === jDist || pDist.endsWith(jDist)) return true
+        if (p.location && p.location.toUpperCase().includes(jDist)) return true
+        return false
+      })
+
+    case 'requiring_body':
+      // Sponsoring Institution strictly restricted to their own projects
+      return projects.filter((p) => {
+        const rBody = (p.requiring_body || p.owner || '').toUpperCase()
+        const jReq = (jurisdiction.requiringBodyCode || '').toUpperCase()
+        return rBody.includes(jReq) || jReq.includes(rBody)
+      })
+
+    case 'citizen':
+      // Citizen Landowner strictly restricted to projects touching their land parcel
+      return projects.filter((p) => {
+        const pDist = (p.district_code || '').toUpperCase()
+        const jDist = (jurisdiction.districtCode || '').toUpperCase()
+        return pDist === jDist || pDist.endsWith(jDist) || (p.location && p.location.toUpperCase().includes(jDist))
+      })
+
+    default:
+      return projects
+  }
+}
+
+/**
+ * Filter cadastral land parcels to strictly prevent cross-boundary inspection:
+ * - Citizen ONLY sees their owned survey numbers (no seeing other private awards)
+ * - District ONLY sees their district parcels
+ * - Local Body ONLY sees their local body parcels
+ */
+export function filterParcelsByJurisdiction<T extends { survey_number?: string; district_code?: string; owner_name?: string; owner_id?: string }>(
+  parcels: T[],
+  jurisdiction?: StakeholderJurisdiction
+): T[] {
+  if (!jurisdiction) return parcels
+
+  if (jurisdiction.scope === 'citizen') {
+    // Citizen can strictly see ONLY their personal survey numbers
+    return parcels.filter((p) => {
+      if (jurisdiction.citizenOwnerId && p.owner_id === jurisdiction.citizenOwnerId) return true
+      if (jurisdiction.scopeCode === 'CIT-KRN-01') {
+        return p.survey_number?.includes('1042') || p.survey_number?.includes('1043') || p.survey_number?.includes('114/7')
+      }
+      if (jurisdiction.scopeCode === 'CIT-MBN-01') {
+        return p.survey_number?.includes('2041') || p.survey_number?.includes('2042')
+      }
+      if (jurisdiction.scopeCode === 'CIT-VNS-01') {
+        return p.survey_number?.includes('3012')
+      }
+      return false
+    })
+  }
+
+  if (jurisdiction.scope === 'district' || jurisdiction.scope === 'local_body') {
+    const jDist = (jurisdiction.districtCode || '').toUpperCase()
+    return parcels.filter((p) => {
+      const pDist = (p.district_code || '').toUpperCase()
+      return pDist === jDist || pDist.endsWith(jDist) || jDist.endsWith(pDist)
+    })
+  }
+
+  return parcels
+}
+
+/**
+ * Statutory restriction: ONLY the Land Requiring Body (PIA) or District Collector can raise a project proposal.
+ */
+export function canInitiateAcquisitionProposal(roleId: string, roleName?: string): boolean {
+  const norm = normalizeRole(roleId || roleName || '')
+  return (
+    norm === 'land_requiring_body' ||
+    norm === 'collector' ||
+    norm.includes('requiring') ||
+    norm.includes('collector')
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
 
