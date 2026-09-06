@@ -753,6 +753,44 @@ function roleStudioTabs(role: StakeholderId): StudioTabKey[] {
   return ROLE_PANEL_CONFIG[role]?.studioTabs ?? []
 }
 
+/**
+ * Format a workflow gate error message with section reference and human
+ * context. Recognizes the timeline gate error codes from
+ * sih_workflow::check_timeline_gates() and surfaces them with the
+ * relevant RFCTLARR Act 2013 / NH Act section citation so judges see
+ * which statutory rule blocked the transition.
+ */
+function formatGateError(rawMessage: string): string {
+  if (!rawMessage) return 'Failed to approve gate'
+
+  // Timeline gate failures arrive as 'Timeline gate failed (CODE): MESSAGE'
+  const timelineMatch = rawMessage.match(/Timeline gate failed \(([^)]+)\):\s*(.*)/)
+  if (timelineMatch) {
+    const code = timelineMatch[1]
+    const msg = timelineMatch[2]
+    const sectionMap: Record<string, string> = {
+      court_stay_active: 'Master PDF §36 — Court Stay Active',
+      declaration_window_expired: 'Master PDF §22.3 — Section 19 Declaration Window Expired',
+      objection_window_still_open: 'Master PDF §22.2 — Objection Window Still Open',
+      possession_before_80pct_payment: 'Master PDF §22.6 — Section 38 Possession Before 80% Payment',
+    }
+    const section = sectionMap[code] || code
+    return `⚠️ Statutory gate blocked the transition\n\n${section}\n\n${msg}`
+  }
+
+  // Missing mandatory documents
+  if (rawMessage.includes('missing') && rawMessage.includes('mandatory statutory document')) {
+    return `⚠️ Missing mandatory documents\n\n${rawMessage}`
+  }
+
+  // Role authorization failures
+  if (rawMessage.includes('not authorized to approve stage')) {
+    return `⚠️ Role not authorized\n\n${rawMessage}`
+  }
+
+  return rawMessage
+}
+
 function StatusPill({ status }: { status: Project['status'] }) {
   const className = status.toLowerCase().replace(' ', '-')
   return (
@@ -1176,7 +1214,7 @@ export default function App() {
       handleOpenAudit()
       syncWorkflowStatus(selected.id)
     } catch (err: any) {
-      setGateError(err.message || 'Failed to approve gate')
+      setGateError(formatGateError(err.message || 'Failed to approve gate'))
     } finally {
       setGateSubmitting(false)
     }
@@ -1204,7 +1242,7 @@ export default function App() {
       handleOpenAudit()
       syncWorkflowStatus(selected.id)
     } catch (err: any) {
-      setGateError(err.message || 'Failed to reject gate')
+      setGateError(formatGateError(err.message || 'Failed to reject gate'))
     } finally {
       setGateSubmitting(false)
     }
@@ -3771,8 +3809,8 @@ export default function App() {
               </div>
 
               {gateError && (
-                <div style={{ marginTop: 12, padding: '8px 12px', background: '#fee2e2', color: '#991b1b', borderRadius: 6, fontSize: 13 }}>
-                  ⚠️ {gateError}
+                <div style={{ marginTop: 12, padding: '10px 12px', background: '#fee2e2', color: '#991b1b', borderRadius: 6, fontSize: 12, whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
+                  {gateError}
                 </div>
               )}
 
