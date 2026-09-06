@@ -1,0 +1,18 @@
+# Build artefacts — never copy into the Docker build context.
+target/
+**/target/
+
+# Frontend artefacts (kept out of the Rust build context).
+node_modules/
+**/node_modules/
+
+# VCS / editor / OS noise.
+.git/
+.gitignore
+.idea/
+.vscode/
+.DS_Store
+
+# Docs that don't affect the build.
+*.md
+**/*.md

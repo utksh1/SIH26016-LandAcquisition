@@ -1,0 +1,16 @@
+# Build artefacts — never copy into the Docker build context.
+node_modules/
+dist/
+**/node_modules/
+**/dist/
+
+# VCS / editor / OS noise.
+.git/
+.gitignore
+.idea/
+.vscode/
+.DS_Store
+
+# Docs that don't affect the build.
+*.md
+**/*.md

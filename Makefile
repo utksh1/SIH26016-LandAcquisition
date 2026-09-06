@@ -1,7 +1,12 @@
-.PHONY: dev-up dev-down dev-logs compose-config
+.PHONY: dev-build dev-up dev-down dev-logs compose-config
 
-# Start the local PostGIS database and placeholder services.
-dev-up:
+# Build (or rebuild) the api + frontend Docker images without starting containers.
+dev-build:
+	docker compose -f deploy/compose/docker-compose.yml build
+
+# Build the images, then start the local PostGIS database, Rust API, and
+# Vite/nginx frontend in detached mode.
+dev-up: dev-build
 	docker compose -f deploy/compose/docker-compose.yml up -d
 
 # Stop local services without removing the database volume.
