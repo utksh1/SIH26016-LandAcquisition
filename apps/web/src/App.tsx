@@ -38,6 +38,7 @@ import {
   stageWorkflowActions,
   isLandOwnerRole,
 } from './rbac'
+import { CategoryViews } from './components/CategoryViews'
 
 type IconName =
   | 'grid'
@@ -797,6 +798,7 @@ export type PortalView = 'landing' | 'ehrms_login' | 'dashboard'
 export default function App() {
   // Navigation & Authentication
   const [portalView, setPortalView] = useState<PortalView>('landing')
+  const [activeCategory, setActiveCategory] = useState<string>('dashboard')
   const [ehrmsEmployeeId, setEhrmsEmployeeId] = useState('EMP001')
   const [authEmployee, setAuthEmployee] = useState<EhrmsEmployee | null>(null)
 
@@ -1196,6 +1198,7 @@ export default function App() {
       setAuthEmployee(null)
     }
     setPortalView('dashboard')
+    setActiveCategory('dashboard')
     window.location.hash = persona.dashboardRoute
     const resolvedName = resolvePersonaName(persona)
     apiClient.login(persona.role, resolvedName).catch(() => {})
@@ -1292,6 +1295,7 @@ export default function App() {
   // Handle Logout / Switch
   const handleLogout = () => {
     setAuthEmployee(null)
+    setActiveCategory('dashboard')
     setPortalView('landing')
     window.location.hash = '#landing'
     showToast('Returned to NLAMS Portal')
@@ -2062,8 +2066,16 @@ export default function App() {
             return sections.flatMap(section =>
               section.items.map(item => {
                 const icon = iconMap[item.id] || 'grid'
+                const isActive = activeCategory === item.id
                 return (
-                  <button key={item.id} className="nav-link" onClick={() => showToast(`Navigating to: ${item.label}`)}>
+                  <button
+                    key={item.id}
+                    className={`nav-link ${isActive ? 'active' : ''}`}
+                    onClick={() => {
+                      setActiveCategory(item.id)
+                      showToast(`Opened: ${item.label}`)
+                    }}
+                  >
                     <Icon name={icon} />
                     <span>{item.label}</span>
                   </button>
@@ -2079,23 +2091,37 @@ export default function App() {
             </button>
           )}
           <button
-            className="nav-link"
+            className={`nav-link ${activeCategory === 'workflow-regimes' ? 'active' : ''}`}
             onClick={() => {
+              setActiveCategory('workflow-regimes')
               apiClient.listWorkflowRegimes().then(setRegimes).catch(() => {})
-              setShowRegimesModal(true)
+              showToast('Opened: Workflow Regimes')
             }}
           >
             <Icon name="folder" />
             <span>Workflow Regimes</span>
             <b>04</b>
           </button>
-          <button className="nav-link" onClick={() => setShowAiModal(true)}>
+          <button
+            className={`nav-link ${activeCategory === 'ai-studio' ? 'active' : ''}`}
+            onClick={() => {
+              setActiveCategory('ai-studio')
+              showToast('Opened: AI & Integrations Studio')
+            }}
+          >
             <Icon name="shield" />
             <span>AI & Integrations Studio</span>
             <b>AI</b>
           </button>
           {can('view_audit') && (
-            <button className="nav-link" onClick={handleOpenAudit}>
+            <button
+              className={`nav-link ${activeCategory === 'audit' ? 'active' : ''}`}
+              onClick={() => {
+                setActiveCategory('audit')
+                handleOpenAudit()
+                showToast('Opened: Cryptographic Audit Ledger')
+              }}
+            >
               <Icon name="file" />
               <span>Cryptographic Audit</span>
               <b>SHA</b>
@@ -2136,9 +2162,26 @@ export default function App() {
             <span />
           </button>
           <div className="breadcrumb">
-            <span>NLAMS</span>
+            <span style={{ cursor: 'pointer' }} onClick={() => setActiveCategory('dashboard')}>NLAMS</span>
             <Icon name="chevron" size={13} />
-            <span className="route-pill">{activePersona.dashboardRoute}</span>
+            <span
+              className="route-pill"
+              style={{ cursor: 'pointer' }}
+              onClick={() => setActiveCategory('dashboard')}
+            >
+              {activePersona.dashboardRoute}
+            </span>
+            {activeCategory !== 'dashboard' && (
+              <>
+                <Icon name="chevron" size={13} />
+                <span
+                  className="route-pill"
+                  style={{ background: '#00ed64', color: '#001e2b', fontWeight: 700, textTransform: 'uppercase' }}
+                >
+                  {activeCategory.replace(/-/g, ' ')}
+                </span>
+              </>
+            )}
             <Icon name="chevron" size={13} />
             <strong>{selected.name}</strong>
           </div>
@@ -2219,8 +2262,46 @@ export default function App() {
         </header>
 
         <div className="page-wrap">
-          {/* Welcome Banner */}
-          <section className="welcome-row">
+          {activeCategory !== 'dashboard' ? (
+            <CategoryViews
+              activeCategory={activeCategory}
+              onSelectCategory={(cat) => setActiveCategory(cat)}
+              projects={projects}
+              selected={selected}
+              onSelectProject={(p) => {
+                setSelected(p)
+                setActiveCategory('dashboard')
+              }}
+              activePersona={activePersona}
+              onSwitchPersona={(p) => handleLogin(p)}
+              stakeholderPersonas={stakeholderPersonas}
+              myTasks={myTasks}
+              meTasks={meTasks}
+              onOpenGateReview={() => setShowGateReviewModal(true)}
+              dilrmpSurvey={dilrmpSurvey}
+              setDilrmpSurvey={setDilrmpSurvey}
+              dilrmpResult={dilrmpResult}
+              dilrmpLoading={dilrmpLoading}
+              onDilrmpLookup={handleDilrmpLookup}
+              pfmsBeneficiary={pfmsBeneficiary}
+              setPfmsBeneficiary={setPfmsBeneficiary}
+              pfmsAmountInr={pfmsAmountInr}
+              setPfmsAmountInr={setPfmsAmountInr}
+              pfmsResult={pfmsResult}
+              pfmsLoading={pfmsLoading}
+              onPfmsDisburse={handlePfmsDisburse}
+              auditEntries={auditEntries}
+              auditStats={auditVerification}
+              regimes={regimes}
+              showToast={showToast}
+              can={can}
+              currentStageIdx={currentStageIdx}
+              rfctlarrStages={rfctlarrStages}
+            />
+          ) : (
+            <>
+              {/* Welcome Banner */}
+              <section className="welcome-row">
             <div>
               <p className="eyebrow">
                 <span className="eyebrow-line" />
@@ -4140,6 +4221,8 @@ export default function App() {
               )}
             </aside>
           </section>
+          </>
+          )}
 
           <footer className="page-footer">
             <span>LandFlow · National Land Acquisition & Management System (NLAMS)</span>

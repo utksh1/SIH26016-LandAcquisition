@@ -750,6 +750,8 @@ export interface Project {
   due: string
   owner: string
   amount: string
+  sector?: string
+  acts_applicable?: string
 }
 
 export interface WorkflowStage {
