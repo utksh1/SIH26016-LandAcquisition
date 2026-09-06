@@ -15,6 +15,8 @@ import {
   type RehabilitationInfo,
   type DashboardKpi,
   type AlertNotice,
+  type DepositWithAuthorityRecord,
+  type OwnershipStatusResponse,
   type ApiProject,
   type Language,
   type Project,
@@ -902,6 +904,36 @@ export default function App() {
   const [regimes, setRegimes] = useState<WorkflowRegime[]>([])
   const [departments, setDepartments] = useState<DepartmentInfo[]>([])
   const [ehrmsEmployees, setEhrmsEmployees] = useState<EhrmsEmployee[]>([])
+
+  // Deposit with Authority (Master PDF §3, migration 007)
+  const [deposits, setDeposits] = useState<DepositWithAuthorityRecord[]>([])
+  const [showDepositModal, setShowDepositModal] = useState(false)
+  const [depositParcelId, setDepositParcelId] = useState('')
+  const [depositAmountPaise, setDepositAmountPaise] = useState('')
+  const [depositReason, setDepositReason] = useState<'disputed' | 'untraceable' | 'under_litigation' | 'multiple_claimants'>('disputed')
+  const [depositCourtRef, setDepositCourtRef] = useState('')
+  const [depositNotes, setDepositNotes] = useState('')
+  const [depositSubmitting, setDepositSubmitting] = useState(false)
+  const [depositError, setDepositError] = useState<string | null>(null)
+
+  // Load deposits when persona switches to Legal Officer (or any role that
+  // displays the deposit list). For MVP, load all deposits via the seeded
+  // demo parcel — production would scope per project + actor jurisdiction.
+  const loadDeposits = async () => {
+    // Use the seeded demo parcel ID (00000000-0000-0000-0000-000000000101)
+    try {
+      const list = await apiClient.listDepositsForParcel('00000000-0000-0000-0000-000000000101')
+      setDeposits(list)
+    } catch (err: any) {
+      // Backend unreachable — keep deposits empty, the UI shows the empty state
+      console.info('Deposit list fetch:', err?.message || err)
+    }
+  }
+  useEffect(() => {
+    if (activePersona.id === 'legal_officer' || activePersona.id === 'collector') {
+      loadDeposits()
+    }
+  }, [activePersona.id])
 
   // Resolve a persona's name/designation/department from the DB-backed eHRMS
   // employee list, falling back to the hardcoded persona metadata only if the
@@ -2714,6 +2746,12 @@ export default function App() {
                     <div style={{ display: 'flex', gap: 8 }}>
                       <button
                         className="primary-button"
+                        onClick={() => setShowDepositModal(true)}
+                      >
+                        + Deposit with Authority
+                      </button>
+                      <button
+                        className="primary-button"
                         onClick={() => showToast('Document bundle assembled with SHA-256 custody chain.')}
                       >
                         Assemble Case Bundle ➔
@@ -2745,13 +2783,65 @@ export default function App() {
                       </div>
                     </div>
                     <div className="role-item-card">
-                      <h4><span>Document Bundle Integrity</span><span className="badge-success">● VERIFIED</span></h4>
+                      <h4><span>Deposits with Authority</span><span className="badge-warning">● 3 ESCROWED</span></h4>
                       <div style={{ fontSize: 11, color: '#52695c', display: 'grid', gap: 6 }}>
-                        <div>• Bundles: 18</div>
-                        <div>• Hash chain: intact</div>
-                        <div>• Custody events: 142</div>
+                        <div>• ₹1.84 Cr — Survey 1043 (multiple claimants)</div>
+                        <div>• ₹2.46 Cr — Survey 1044 (untraceable owner)</div>
+                        <div>• Section 77 / 3H(2) sub-flow active</div>
                       </div>
                     </div>
+                  </div>
+
+                  {/* Deposit with Authority list */}
+                  <div style={{ marginTop: 16, padding: 12, background: '#f4f6ee', borderRadius: 8, border: '1px solid #dce2d6' }}>
+                    <h4 style={{ margin: '0 0 8px', fontSize: 13, color: '#10251f' }}>
+                      Escrow Deposits (Section 77 / 3H(2))
+                    </h4>
+                    {deposits.length === 0 ? (
+                      <p style={{ fontSize: 11, color: '#7a8e83', margin: 0 }}>
+                        No active deposits. Click "Deposit with Authority" to escrow compensation when ownership is disputed.
+                      </p>
+                    ) : (
+                      <div style={{ display: 'grid', gap: 6 }}>
+                        {deposits.map((d) => (
+                          <div key={d.id} style={{ background: '#fff', padding: 8, borderRadius: 6, border: '1px solid #e3e8de', fontSize: 11 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                              <strong>₹{(d.amount_paise / 100).toLocaleString('en-IN')}</strong>
+                              <span className={d.status === 'released' ? 'badge-success' : 'badge-warning'}>
+                                {d.status.toUpperCase()}
+                              </span>
+                            </div>
+                            <div style={{ color: '#52695c' }}>
+                              Reason: {d.deposit_reason.replace(/_/g, ' ')}
+                              {d.court_reference && ` · Court: ${d.court_reference}`}
+                            </div>
+                            {d.released_at ? (
+                              <div style={{ color: '#276538', marginTop: 4, font: '10px "DM Mono"' }}>
+                                ✓ Released to {d.release_beneficiary} on {new Date(d.released_at).toLocaleDateString()}
+                              </div>
+                            ) : (
+                              <button
+                                className="secondary-button"
+                                style={{ fontSize: 10, padding: '2px 8px', marginTop: 4 }}
+                                onClick={() => {
+                                  const beneficiary = prompt('Release to beneficiary (name/ID):')
+                                  if (!beneficiary) return
+                                  apiClient.releaseDeposit(d.id, {
+                                    release_beneficiary: beneficiary,
+                                    actor: authEmployee?.employee_id,
+                                  }).then(() => {
+                                    showToast(`Deposit ${d.id.slice(0, 8)} released to ${beneficiary}`)
+                                    loadDeposits()
+                                  }).catch(err => showToast(`Release failed: ${err.message}`))
+                                }}
+                              >
+                                Release Deposit
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </section>
               )}
@@ -4040,6 +4130,156 @@ export default function App() {
             <div className="modal-footer">
               <button className="primary-button" onClick={() => setShowAiModal(false)}>
                 Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ---------------------------------------------------- */}
+      {/* MODAL 5: DEPOSIT WITH AUTHORITY MODAL               */}
+      {/* Section 77 / 3H(2) escrow deposit for parcels with   */}
+      {/* disputed / untraceable / multiple-claimant ownership */}
+      {/* ---------------------------------------------------- */}
+      {showDepositModal && (
+        <div className="modal-backdrop" onClick={() => setShowDepositModal(false)}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 540 }}>
+            <div className="modal-header">
+              <h3>Deposit Compensation with Authority</h3>
+              <button className="icon-button" onClick={() => setShowDepositModal(false)}>
+                <Icon name="close" />
+              </button>
+            </div>
+            <div className="modal-body" style={{ padding: 20 }}>
+              <p style={{ fontSize: 11, color: '#62786b', margin: '0 0 14px' }}>
+                Use this form when the parcel's ownership_status is not 'clear' and compensation
+                cannot be paid directly to a person. The amount is escrowed with the authority
+                until a competent court or revenue officer determines the rightful beneficiary.
+                <br />
+                <strong>Master PDF §3</strong> · RFCTLARR Act 2013 Section 77 · NH Act 1956 Section 3H(2)
+              </p>
+
+              <div className="form-group" style={{ marginBottom: 12 }}>
+                <label>Parcel ID</label>
+                <input
+                  className="form-input"
+                  placeholder="00000000-0000-0000-0000-000000000101"
+                  value={depositParcelId}
+                  onChange={(e) => setDepositParcelId(e.target.value)}
+                />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: 12 }}>
+                <label>Compensation Amount (in paise — 1 INR = 100 paise)</label>
+                <input
+                  className="form-input"
+                  type="number"
+                  placeholder="e.g. 184000000 for ₹18.4 lakh"
+                  value={depositAmountPaise}
+                  onChange={(e) => setDepositAmountPaise(e.target.value)}
+                />
+                {depositAmountPaise && Number(depositAmountPaise) > 0 && (
+                  <small style={{ color: '#7a8e83', fontSize: 10, marginTop: 4, display: 'block' }}>
+                    ≈ ₹{(Number(depositAmountPaise) / 100).toLocaleString('en-IN')}
+                  </small>
+                )}
+              </div>
+
+              <div className="form-group" style={{ marginBottom: 12 }}>
+                <label>Deposit Reason (ownership_status)</label>
+                <select
+                  className="form-input"
+                  value={depositReason}
+                  onChange={(e) => setDepositReason(e.target.value as any)}
+                >
+                  <option value="disputed">Disputed — title contested</option>
+                  <option value="untraceable">Untraceable — owner not located</option>
+                  <option value="under_litigation">Under litigation — court case pending</option>
+                  <option value="multiple_claimants">Multiple claimants — competing interests</option>
+                </select>
+              </div>
+
+              <div className="form-group" style={{ marginBottom: 12 }}>
+                <label>Court Reference (optional)</label>
+                <input
+                  className="form-input"
+                  placeholder="e.g. WP-2026-184"
+                  value={depositCourtRef}
+                  onChange={(e) => setDepositCourtRef(e.target.value)}
+                />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: 12 }}>
+                <label>Notes (optional)</label>
+                <textarea
+                  className="form-textarea"
+                  rows={2}
+                  placeholder="Any additional context for the audit trail..."
+                  value={depositNotes}
+                  onChange={(e) => setDepositNotes(e.target.value)}
+                />
+              </div>
+
+              {depositError && (
+                <div style={{ marginBottom: 12, padding: '8px 12px', background: '#fee2e2', color: '#991b1b', borderRadius: 6, fontSize: 12 }}>
+                  ⚠️ {depositError}
+                </div>
+              )}
+
+              <div style={{ padding: 10, background: '#f4f6ee', borderRadius: 6, fontSize: 11, color: '#52695c' }}>
+                <strong>Audit trail:</strong> This action will write a hash-chained entry to the
+                audit_log with action <code>DEPOSIT_WITH_AUTHORITY</code>, recording the actor,
+                amount, reason, and court reference. The hash chain is append-only and
+                evidentiary — it cannot be modified after creation.
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button
+                className="secondary-button"
+                onClick={() => setShowDepositModal(false)}
+                disabled={depositSubmitting}
+              >
+                Cancel
+              </button>
+              <button
+                className="primary-button"
+                disabled={depositSubmitting || !depositParcelId || !depositAmountPaise}
+                onClick={async () => {
+                  const amount = Number(depositAmountPaise)
+                  if (!depositParcelId.trim()) {
+                    setDepositError('Parcel ID is required')
+                    return
+                  }
+                  if (!Number.isFinite(amount) || amount <= 0) {
+                    setDepositError('Amount must be a positive number (in paise)')
+                    return
+                  }
+                  setDepositSubmitting(true)
+                  setDepositError(null)
+                  try {
+                    const record = await apiClient.createDeposit({
+                      parcel_id: depositParcelId.trim(),
+                      amount_paise: amount,
+                      deposit_reason: depositReason,
+                      court_reference: depositCourtRef.trim() || null,
+                      notes: depositNotes.trim() || null,
+                      actor: authEmployee?.employee_id,
+                    })
+                    showToast(`Deposited ₹${(amount / 100).toLocaleString('en-IN')} with authority (${record.id.slice(0, 8)})`)
+                    setShowDepositModal(false)
+                    setDepositParcelId('')
+                    setDepositAmountPaise('')
+                    setDepositCourtRef('')
+                    setDepositNotes('')
+                    loadDeposits()
+                  } catch (err: any) {
+                    setDepositError(err.message || 'Failed to create deposit')
+                  } finally {
+                    setDepositSubmitting(false)
+                  }
+                }}
+              >
+                {depositSubmitting ? 'Escrowing...' : 'Deposit with Authority'}
               </button>
             </div>
           </div>

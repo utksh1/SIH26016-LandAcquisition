@@ -323,6 +323,48 @@ export interface ApiClient {
   getWorkflowStakeholders(): Promise<WorkflowStakeholdersResponse>
   getDashboardKpis(): Promise<DashboardKpi[]>
   getAlerts(): Promise<AlertNotice[]>
+  getParcelOwnership(parcelId: string): Promise<OwnershipStatusResponse>
+  setParcelOwnership(parcelId: string, ownershipStatus: string, actor?: string): Promise<OwnershipStatusResponse>
+  listDepositsForParcel(parcelId: string): Promise<DepositWithAuthorityRecord[]>
+  createDeposit(payload: CreateDepositRequest): Promise<DepositWithAuthorityRecord>
+  releaseDeposit(depositId: string, payload: ReleaseDepositRequest): Promise<DepositWithAuthorityRecord>
+}
+
+export interface OwnershipStatusResponse {
+  parcel_id: string
+  survey_number: string
+  ownership_status: string  // 'clear' | 'disputed' | 'untraceable' | 'under_litigation' | 'multiple_claimants'
+  has_active_deposit: boolean
+}
+
+export interface DepositWithAuthorityRecord {
+  id: string
+  parcel_id: string
+  award_id: string | null
+  amount_paise: number
+  deposit_reason: string
+  court_reference: string | null
+  deposited_at: string
+  released_at: string | null
+  release_beneficiary: string | null
+  status: string  // 'deposited' | 'released' | 'escheated'
+  notes: string | null
+}
+
+export interface CreateDepositRequest {
+  parcel_id: string
+  award_id?: string | null
+  amount_paise: number
+  deposit_reason: string  // 'disputed' | 'untraceable' | 'under_litigation' | 'multiple_claimants'
+  court_reference?: string | null
+  notes?: string | null
+  actor?: string
+}
+
+export interface ReleaseDepositRequest {
+  release_beneficiary: string
+  release_court_order?: string | null
+  actor?: string
 }
 
 const defaultBaseUrl = 'http://localhost:3000'
@@ -377,6 +419,10 @@ export const apiPaths = {
   delayRisk: (projectId: string) => `/projects/${encodeURIComponent(projectId)}/delay-risk`,
   dashboardKpis: '/dashboard/kpis',
   alerts: '/alerts',
+  parcelOwnership: (parcelId: string) => `/parcels/${encodeURIComponent(parcelId)}/ownership`,
+  depositsForParcel: (parcelId: string) => `/deposits/parcel/${encodeURIComponent(parcelId)}`,
+  deposits: '/deposits',
+  releaseDeposit: (depositId: string) => `/deposits/${encodeURIComponent(depositId)}/release`,
 } as const
 
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T
@@ -519,6 +565,15 @@ export const apiClient: ApiClient = {
   getWorkflowStakeholders: () => request<WorkflowStakeholdersResponse>('GET', apiPaths.workflowStakeholders),
   getDashboardKpis: () => request<DashboardKpi[]>('GET', apiPaths.dashboardKpis),
   getAlerts: () => request<AlertNotice[]>('GET', apiPaths.alerts),
+
+  // Ownership status + deposit-with-authority sub-flow (Master PDF §3, migration 007)
+  getParcelOwnership: (parcelId: string) => request<OwnershipStatusResponse>('GET', apiPaths.parcelOwnership(parcelId)),
+  setParcelOwnership: (parcelId: string, ownershipStatus: string, actor?: string) =>
+    request<OwnershipStatusResponse>('POST', apiPaths.parcelOwnership(parcelId), { ownership_status: ownershipStatus, actor }),
+  listDepositsForParcel: (parcelId: string) => request<DepositWithAuthorityRecord[]>('GET', apiPaths.depositsForParcel(parcelId)),
+  createDeposit: (payload: CreateDepositRequest) => request<DepositWithAuthorityRecord>('POST', apiPaths.deposits, payload),
+  releaseDeposit: (depositId: string, payload: ReleaseDepositRequest) =>
+    request<DepositWithAuthorityRecord>('POST', apiPaths.releaseDeposit(depositId), payload),
 }
 
 export const isApiConfigured = Boolean(activeBaseUrl)
