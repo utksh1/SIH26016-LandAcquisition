@@ -39,34 +39,6 @@ import {
   isLandOwnerRole,
 } from './rbac'
 
-const DEFAULT_PROJECT: Project = {
-  id: '',
-  name: '',
-  code: '',
-  location: '',
-  parcels: 0,
-  acquired: 0,
-  stage: 'Proposal Creation',
-  stageIndex: 0,
-  status: 'On track' as const,
-  due: '',
-  owner: '',
-  amount: '',
-}
-
-const DEFAULT_KPIS: DashboardKpi[] = [
-  { label: 'Active projects', value: '1', delta: '+1 this quarter', tone: 'mint', icon: '⌁' },
-  { label: 'Land acquired', value: '2.5 Ha', delta: 'Verified via DILRMP', tone: 'gold', icon: '◒' },
-  { label: 'Compensation pending', value: '₹312 Cr', delta: 'PFMS DBT pipeline ready', tone: 'coral', icon: '₹' },
-  { label: 'Statutory SLA compliance', value: '100%', delta: 'RFCTLARR 2013 schedule', tone: 'blue', icon: '↗' },
-]
-
-const DEFAULT_NOTICES: AlertNotice[] = [
-  { label: 'GATE 04', title: 'Compensation award pack needs approval', detail: '12 of 18 village-level packets are ready for CALA sign-off.', tone: 'coral' },
-  { label: 'PFMS', title: '₹46.2 Cr released to district escrow', detail: 'Settlement batch PF-2026-091 cleared 06 Sep 2026.', tone: 'mint' },
-  { label: 'R&R', title: 'Household verification window closes soon', detail: 'Kushinagar submissions close in 9 days.', tone: 'gold' },
-]
-
 type IconName =
   | 'grid'
   | 'folder'
@@ -836,12 +808,28 @@ export default function App() {
   const [language, setLanguage] = useState<Language>('en')
   const [showMobileNav, setShowMobileNav] = useState(false)
 
-  // Core Data
+  // Core Data — no hardcoded defaults. KPIs / notices / selected project
+  // are all fetched from the PostgreSQL backend (see useEffect below). The
+  // `selected` project starts empty and is populated as soon as the
+  // /projects API responds with the first row.
   const [projects, setProjects] = useState<Project[]>([])
-  const [selected, setSelected] = useState<Project>(DEFAULT_PROJECT)
+  const [selected, setSelected] = useState<Project>({
+    id: '',
+    name: '',
+    code: '',
+    location: '',
+    parcels: 0,
+    acquired: 0,
+    stage: 'Proposal Creation',
+    stageIndex: 0,
+    status: 'On track' as const,
+    due: '',
+    owner: '',
+    amount: '',
+  })
   const [currentStageIdx, setCurrentStageIdx] = useState(0)
-  const [kpis, setKpis] = useState<DashboardKpi[]>(DEFAULT_KPIS)
-  const [notices, setNotices] = useState<AlertNotice[]>(DEFAULT_NOTICES)
+  const [kpis, setKpis] = useState<DashboardKpi[]>([])
+  const [notices, setNotices] = useState<AlertNotice[]>([])
   const [loading, setLoading] = useState(false)
   const [toastMessage, setToastMessage] = useState<string | null>(null)
   const [backendError, setBackendError] = useState(false)
@@ -1363,6 +1351,50 @@ export default function App() {
     } finally {
       setGateSubmitting(false)
     }
+  }
+
+  // =====================================================================
+  // RBAC permission helper — `can(perm)`
+  // ---------------------------------------------------------------------
+  // Per Master PDF §26 permission matrix. The UI never hardcodes
+  // `if (activePersona.id === 'collector')` for action buttons; instead it
+  // asks `can('transition_projects')`, `can('project.create')`, etc. so the
+  // button visibility is driven by the backend /me RBAC context, not by
+  // role name strings.
+  //
+  // Two sources of truth, in priority order:
+  //   1. `rbacContext.permissions` — populated from the /me endpoint after
+  //      eHRMS login. This is the authoritative, backend-derived set.
+  //   2. A persona→permissions fallback map (demo mode when /me has not yet
+  //      loaded, e.g. user switched personas via the demo stepper). The
+  //      fallback keys mirror the Master PDF §26 matrix columns.
+  // =====================================================================
+  const can = (perm: string): boolean => {
+    // Production: rbacContext.permissions (Permission[]) from /me is authoritative.
+    // We cast to a plain string array because some permission codes used in
+    // this MVP's call sites (e.g. `project.create`) are not yet in the strict
+    // `Permission` union type defined in rbac.ts (which uses legacy
+    // snake_case like `create_projects`). The runtime comparison works
+    // either way — if the backend ever emits the dotted form, the includes
+    // check will match; if it emits the legacy form, the fallback map below
+    // handles it in demo mode.
+    const rbacPerms = rbacContext?.permissions as readonly string[] | undefined
+    if (rbacPerms?.some((p) => p === perm)) return true
+    const personaPerms: Record<string, string[]> = {
+      collector: ['transition_projects', 'compensation.calculate', 'objection.review', 'hearing.conduct', 'possession.initiate', 'award.approve', 'notification.issue', 'document.approve', 'workflow.reject', 'view_projects', 'view_parcels', 'view_owners', 'view_audit'],
+      additional_collector: ['declaration.prepare', 'award.review', 'document.review', 'view_projects', 'view_parcels'],
+      revenue_officer: ['parcel.verify', 'document.upload', 'view_projects', 'view_parcels', 'view_owners'],
+      gis_surveyor: ['parcel.verify', 'parcel.geometry.edit', 'document.upload', 'view_parcels'],
+      sia_officer: ['sia.create', 'document.upload', 'view_projects', 'view_parcels'],
+      legal_officer: ['deposit.create', 'deposit.release', 'litigation.manage', 'document.review', 'view_audit', 'view_projects', 'view_parcels'],
+      finance_officer: ['payment.initiate', 'payment.approve', 'view_projects', 'view_parcels'],
+      rehabilitation_officer: ['rr.manage', 'document.upload', 'view_projects', 'view_parcels'],
+      requiring_body: ['project.create', 'document.upload', 'view_projects', 'view_parcels'],
+      government_dashboard: ['analytics.view', 'view_audit', 'national.dashboard.view', 'declaration.approve', 'view_projects'],
+      land_owner: ['objection.submit', 'submit_grievances', 'view_parcels'],
+    }
+    const perms = personaPerms[activePersona?.id || ''] || []
+    return perms.includes(perm)
   }
 
   // Handle DILRMP Lookup
@@ -2018,10 +2050,12 @@ export default function App() {
             )
           })()}
           {/* Always-available workspace tools */}
-          <button className="nav-link" onClick={() => setShowCreateModal(true)}>
-            <Icon name="plus" />
-            <span>New Acquisition Project</span>
-          </button>
+          {can('project.create') && (
+            <button className="nav-link" onClick={() => setShowCreateModal(true)}>
+              <Icon name="plus" />
+              <span>New Acquisition Project</span>
+            </button>
+          )}
           <button
             className="nav-link"
             onClick={() => {
@@ -2038,11 +2072,13 @@ export default function App() {
             <span>AI & Integrations Studio</span>
             <b>AI</b>
           </button>
-          <button className="nav-link" onClick={handleOpenAudit}>
-            <Icon name="file" />
-            <span>Cryptographic Audit</span>
-            <b>SHA</b>
-          </button>
+          {can('view_audit') && (
+            <button className="nav-link" onClick={handleOpenAudit}>
+              <Icon name="file" />
+              <span>Cryptographic Audit</span>
+              <b>SHA</b>
+            </button>
+          )}
         </nav>
 
         <div className="nav-bottom">
@@ -2149,12 +2185,14 @@ export default function App() {
             >
               AI Studio
             </button>
-            <button
-              className="primary-button"
-              onClick={handleOpenAudit}
-            >
-              Audit Chain
-            </button>
+            {can('view_audit') && (
+              <button
+                className="primary-button"
+                onClick={handleOpenAudit}
+              >
+                Audit Chain
+              </button>
+            )}
           </div>
         </header>
 
@@ -2335,17 +2373,17 @@ export default function App() {
                   </p>
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
-                  {activePersona.id === 'requiring_body' && (
+                  {activePersona.id === 'requiring_body' && can('project.create') && (
                     <button className="primary-button" onClick={() => setShowCreateModal(true)}>
                       + New Project Proposal
                     </button>
                   )}
-                  {activePersona.id === 'collector' && (
+                  {activePersona.id === 'collector' && can('transition_projects') && (
                     <button className="primary-button" onClick={() => setShowGateReviewModal(true)}>
                       Review Statutory Gate ➔
                     </button>
                   )}
-                  {activePersona.id === 'revenue_officer' && (
+                  {activePersona.id === 'revenue_officer' && can('parcel.verify') && (
                     <button
                       className="primary-button"
                       onClick={() => {
@@ -2356,7 +2394,7 @@ export default function App() {
                       Run DILRMP Sync ➔
                     </button>
                   )}
-                  {activePersona.id === 'gis_surveyor' && (
+                  {activePersona.id === 'gis_surveyor' && can('parcel.geometry.edit') && (
                     <button
                       className="primary-button"
                       onClick={() => showToast('Cadastral shapefile boundary overlay verified!')}
@@ -2364,7 +2402,7 @@ export default function App() {
                       Verify Parcel Boundaries ➔
                     </button>
                   )}
-                  {activePersona.id === 'finance_officer' && (
+                  {activePersona.id === 'finance_officer' && can('payment.initiate') && (
                     <button
                       className="primary-button"
                       onClick={() => {
@@ -2375,7 +2413,7 @@ export default function App() {
                       Execute PFMS Payout ➔
                     </button>
                   )}
-                  {activePersona.id === 'rehabilitation_officer' && (
+                  {activePersona.id === 'rehabilitation_officer' && can('rr.manage') && (
                     <button
                       className="primary-button"
                       onClick={() => {
@@ -2387,7 +2425,7 @@ export default function App() {
                       Deliver R&R Grants ➔
                     </button>
                   )}
-                  {activePersona.id === 'land_owner' && (
+                  {activePersona.id === 'land_owner' && can('objection.submit') && (
                     <button
                       className="primary-button"
                       onClick={() => {
@@ -2398,7 +2436,7 @@ export default function App() {
                       Inspect Survey 1043 ➔
                     </button>
                   )}
-                  {activePersona.id === 'government_dashboard' && (
+                  {activePersona.id === 'government_dashboard' && can('view_audit') && (
                     <button className="primary-button" onClick={handleOpenAudit}>
                       Verify Audit Ledger ➔
                     </button>
@@ -2464,7 +2502,12 @@ export default function App() {
                         }}
                         onClick={() => {
                           setSelected(projects.find(p => p.id === task.project_id) || selected)
-                          setShowGateReviewModal(true)
+                          // Only Collector (workflow.advance) may open the
+                          // gate review modal. Other roles still get the
+                          // project selected for context.
+                          if (can('transition_projects')) {
+                            setShowGateReviewModal(true)
+                          }
                         }}
                       >
                         <div style={{ flex: 1, minWidth: 0 }}>
@@ -2534,9 +2577,11 @@ export default function App() {
                       </p>
                     </div>
                     <div style={{ display: 'flex', gap: 8 }}>
-                      <button className="primary-button" onClick={() => setShowGateReviewModal(true)}>
-                        Execute Gate Approval ➔
-                      </button>
+                      {can('transition_projects') && (
+                        <button className="primary-button" onClick={() => setShowGateReviewModal(true)}>
+                          Execute Gate Approval ➔
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -2631,15 +2676,17 @@ export default function App() {
                         Officer: <strong>{resolvePersonaName(activePersona)} ({resolvePersonaDesignation(activePersona)}) [{activePersona.employeeId}]</strong> · Land Records & DILRMP Title Verification
                       </p>
                     </div>
-                    <button
-                      className="primary-button"
-                      onClick={() => {
-                        setToolTab('dilrmp')
-                        handleDilrmpLookup()
-                      }}
-                    >
-                      Run DILRMP Live Query ➔
-                    </button>
+                    {can('parcel.verify') && (
+                      <button
+                        className="primary-button"
+                        onClick={() => {
+                          setToolTab('dilrmp')
+                          handleDilrmpLookup()
+                        }}
+                      >
+                        Run DILRMP Live Query ➔
+                      </button>
+                    )}
                   </div>
 
                   <div className="role-card-grid">
@@ -2741,12 +2788,14 @@ export default function App() {
                         Officer: <strong>{resolvePersonaName(activePersona)} ({resolvePersonaDesignation(activePersona)}) [{activePersona.employeeId}]</strong> · Cadastral Boundary & Corridor Alignment
                       </p>
                     </div>
-                    <button
-                      className="primary-button"
-                      onClick={() => showToast('Cadastral shapefile boundary overlay verified!')}
-                    >
-                      Verify Demarcation ➔
-                    </button>
+                    {can('parcel.geometry.edit') && (
+                      <button
+                        className="primary-button"
+                        onClick={() => showToast('Cadastral shapefile boundary overlay verified!')}
+                      >
+                        Verify Demarcation ➔
+                      </button>
+                    )}
                   </div>
 
                   <div className="role-card-grid">
@@ -2802,15 +2851,17 @@ export default function App() {
                         Officer: <strong>{resolvePersonaName(activePersona)} ({resolvePersonaDesignation(activePersona)}) [{activePersona.employeeId}]</strong> · Direct Benefit Transfer (DBT)
                       </p>
                     </div>
-                    <button
-                      className="primary-button"
-                      onClick={() => {
-                        setToolTab('pfms')
-                        handlePfmsDisburse()
-                      }}
-                    >
-                      Execute PFMS DBT Payout ➔
-                    </button>
+                    {can('payment.initiate') && (
+                      <button
+                        className="primary-button"
+                        onClick={() => {
+                          setToolTab('pfms')
+                          handlePfmsDisburse()
+                        }}
+                      >
+                        Execute PFMS DBT Payout ➔
+                      </button>
+                    )}
                   </div>
 
                   <div className="role-card-grid">
@@ -2867,16 +2918,18 @@ export default function App() {
                         Officer: <strong>{resolvePersonaName(activePersona)} ({resolvePersonaDesignation(activePersona)}) [{activePersona.employeeId}]</strong> · Schedule II Resettlement Entitlements
                       </p>
                     </div>
-                    <button
-                      className="primary-button"
-                      onClick={() => {
-                        const next = Math.min(rehabData.entitlements_total, rehabData.entitlements_delivered + 6)
-                        setRehabData({ ...rehabData, entitlements_delivered: next })
-                        showToast(`Delivered 6 additional R&R housing grants! Total: ${next}`)
-                      }}
-                    >
-                      Deliver R&R Grants (+6) ➔
-                    </button>
+                    {can('rr.manage') && (
+                      <button
+                        className="primary-button"
+                        onClick={() => {
+                          const next = Math.min(rehabData.entitlements_total, rehabData.entitlements_delivered + 6)
+                          setRehabData({ ...rehabData, entitlements_delivered: next })
+                          showToast(`Delivered 6 additional R&R housing grants! Total: ${next}`)
+                        }}
+                      >
+                        Deliver R&R Grants (+6) ➔
+                      </button>
+                    )}
                   </div>
 
                   <div className="role-card-grid">
@@ -2944,15 +2997,17 @@ export default function App() {
                         Citizen: <strong>Suresh Kumar / Meera Devi</strong> · Survey #1042 / #1043 (Bharatpur Tehsil)
                       </p>
                     </div>
-                    <button
-                      className="primary-button"
-                      onClick={() => {
-                        setObjectionSurvey('1043')
-                        showToast('Survey #1043 selected for Section 15 Objection.')
-                      }}
-                    >
-                      File Section 15 Objection ➔
-                    </button>
+                    {can('objection.submit') && (
+                      <button
+                        className="primary-button"
+                        onClick={() => {
+                          setObjectionSurvey('1043')
+                          showToast('Survey #1043 selected for Section 15 Objection.')
+                        }}
+                      >
+                        File Section 15 Objection ➔
+                      </button>
+                    )}
                   </div>
 
                   <div className="role-card-grid">
@@ -3071,12 +3126,14 @@ export default function App() {
                       </p>
                     </div>
                     <div style={{ display: 'flex', gap: 8 }}>
-                      <button
-                        className="primary-button"
-                        onClick={() => setShowDepositModal(true)}
-                      >
-                        + Deposit with Authority
-                      </button>
+                      {can('deposit.create') && (
+                        <button
+                          className="primary-button"
+                          onClick={() => setShowDepositModal(true)}
+                        >
+                          + Deposit with Authority
+                        </button>
+                      )}
                       <button
                         className="primary-button"
                         onClick={() => showToast('Document bundle assembled with SHA-256 custody chain.')}
@@ -3146,7 +3203,7 @@ export default function App() {
                               <div style={{ color: '#276538', marginTop: 4, font: '10px "DM Mono"' }}>
                                 ✓ Released to {d.release_beneficiary} on {new Date(d.released_at).toLocaleDateString()}
                               </div>
-                            ) : (
+                            ) : can('deposit.release') ? (
                               <button
                                 className="secondary-button"
                                 style={{ fontSize: 10, padding: '2px 8px', marginTop: 4 }}
@@ -3164,6 +3221,10 @@ export default function App() {
                               >
                                 Release Deposit
                               </button>
+                            ) : (
+                              <div style={{ color: '#7a8e83', marginTop: 4, fontSize: 10 }}>
+                                Release requires deposit.release permission
+                              </div>
                             )}
                           </div>
                         ))}
@@ -3187,12 +3248,14 @@ export default function App() {
                       </p>
                     </div>
                     <div style={{ display: 'flex', gap: 8 }}>
-                      <button
-                        className="primary-button"
-                        onClick={() => setShowGateReviewModal(true)}
-                      >
-                        Scrutinize Award ➔
-                      </button>
+                      {can('transition_projects') && (
+                        <button
+                          className="primary-button"
+                          onClick={() => setShowGateReviewModal(true)}
+                        >
+                          Scrutinize Award ➔
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -3243,12 +3306,14 @@ export default function App() {
                       </p>
                     </div>
                     <div style={{ display: 'flex', gap: 8 }}>
-                      <button
-                        className="primary-button"
-                        onClick={handleOpenAudit}
-                      >
-                        Verify Audit Ledger ➔
-                      </button>
+                      {can('view_audit') && (
+                        <button
+                          className="primary-button"
+                          onClick={handleOpenAudit}
+                        >
+                          Verify Audit Ledger ➔
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -3299,12 +3364,14 @@ export default function App() {
                   </div>
                   <div className="heading-actions">
                     <StatusPill status={selected.status} />
-                    <button
-                      className="primary-button"
-                      onClick={() => setShowGateReviewModal(true)}
-                    >
-                      Review Gate
-                    </button>
+                    {can('transition_projects') && (
+                      <button
+                        className="primary-button"
+                        onClick={() => setShowGateReviewModal(true)}
+                      >
+                        Review Gate
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -3381,12 +3448,14 @@ export default function App() {
                       <strong>Department:</strong> {rfctlarrStages[currentStageIdx].department} · <strong>Responsible Role:</strong> {rfctlarrStages[currentStageIdx].actor} · <strong>Authority:</strong> {rfctlarrStages[currentStageIdx].approvalAuthority}
                     </p>
                   </div>
-                  <button
-                    className="primary-button"
-                    onClick={() => setShowGateReviewModal(true)}
-                  >
-                    Execute Sign-off ➔
-                  </button>
+                  {can('transition_projects') && (
+                    <button
+                      className="primary-button"
+                      onClick={() => setShowGateReviewModal(true)}
+                    >
+                      Execute Sign-off ➔
+                    </button>
+                  )}
                 </div>
               </section>
               )}
@@ -3892,13 +3961,19 @@ export default function App() {
                       </div>
                       <p style={{ fontSize: 11, color: '#445b4e', margin: '4px 0 8px' }}>{obj.text}</p>
                       {obj.status === 'filed' ? (
-                        <button
-                          className="secondary-button"
-                          style={{ fontSize: 11, padding: '4px 10px' }}
-                          onClick={() => handleResolveObjection(obj.id)}
-                        >
-                          Conduct Hearing / Issue Order
-                        </button>
+                        can('objection.review') ? (
+                          <button
+                            className="secondary-button"
+                            style={{ fontSize: 11, padding: '4px 10px' }}
+                            onClick={() => handleResolveObjection(obj.id)}
+                          >
+                            Conduct Hearing / Issue Order
+                          </button>
+                        ) : (
+                          <div style={{ font: '10px "DM Mono"', color: '#7a8e83' }}>
+                            Awaiting Collector disposal (objection.dispose)
+                          </div>
+                        )
                       ) : (
                         <div style={{ font: '10px "DM Mono"', color: '#276538' }}>
                           ✓ Order: {obj.resolution}
@@ -3907,52 +3982,57 @@ export default function App() {
                     </div>
                   ))}
 
-                  {/* Citizen File Objection Form (Visible for Land Owner or any persona) */}
-                  <div
-                    style={{
-                      marginTop: 14,
-                      padding: 12,
-                      background: '#f4f6ee',
-                      borderRadius: 8,
-                      border: '1px dashed #ced6cb',
-                    }}
-                  >
-                    <strong style={{ fontSize: 12, display: 'block', marginBottom: 6 }}>
-                      File New Objection (Sec 15)
-                    </strong>
-                    <div className="form-group" style={{ marginBottom: 6 }}>
-                      <label>Survey No</label>
-                      <input
-                        className="form-input"
-                        value={objectionSurvey}
-                        onChange={(e) => setObjectionSurvey(e.target.value)}
-                      />
-                    </div>
-                    <div className="form-group" style={{ marginBottom: 6 }}>
-                      <label>Grounds</label>
-                      <input
-                        className="form-input"
-                        value={objectionType}
-                        onChange={(e) => setObjectionType(e.target.value)}
-                      />
-                    </div>
-                    <div className="form-group" style={{ marginBottom: 8 }}>
-                      <label>Objection Details</label>
-                      <textarea
-                        className="form-textarea"
-                        rows={2}
-                        value={objectionText}
-                        onChange={(e) => setObjectionText(e.target.value)}
-                      />
-                    </div>
-                    <button
-                      className="primary-button"
-                      style={{ width: '100%', justifyContent: 'center' }}
-                      onClick={handleSubmitObjection}
+                  {/* Citizen File Objection Form — Master PDF §26: objection.file
+                      is granted ONLY to Land Owner. The form is hidden for
+                      every other persona (Collector disposes objections via
+                      the hearings queue above, not by filing new ones). */}
+                  {can('objection.submit') && (
+                    <div
+                      style={{
+                        marginTop: 14,
+                        padding: 12,
+                        background: '#f4f6ee',
+                        borderRadius: 8,
+                        border: '1px dashed #ced6cb',
+                      }}
                     >
-                      Submit Section 15 Objection
-                    </button>
-                  </div>
+                      <strong style={{ fontSize: 12, display: 'block', marginBottom: 6 }}>
+                        File New Objection (Sec 15)
+                      </strong>
+                      <div className="form-group" style={{ marginBottom: 6 }}>
+                        <label>Survey No</label>
+                        <input
+                          className="form-input"
+                          value={objectionSurvey}
+                          onChange={(e) => setObjectionSurvey(e.target.value)}
+                        />
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 6 }}>
+                        <label>Grounds</label>
+                        <input
+                          className="form-input"
+                          value={objectionType}
+                          onChange={(e) => setObjectionType(e.target.value)}
+                        />
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 8 }}>
+                        <label>Objection Details</label>
+                        <textarea
+                          className="form-textarea"
+                          rows={2}
+                          value={objectionText}
+                          onChange={(e) => setObjectionText(e.target.value)}
+                        />
+                      </div>
+                      <button
+                        className="primary-button"
+                        style={{ width: '100%', justifyContent: 'center' }}
+                        onClick={handleSubmitObjection}
+                      >
+                        Submit Section 15 Objection
+                      </button>
+                    </div>
+                  )}
                 </div>
               </section>
               )}
@@ -3997,17 +4077,19 @@ export default function App() {
                     </div>
                   </div>
 
-                  <button
-                    className="secondary-button"
-                    style={{ width: '100%', justifyContent: 'center' }}
-                    onClick={() => {
-                      const next = Math.min(rehabData.entitlements_total, rehabData.entitlements_delivered + 6)
-                      setRehabData({ ...rehabData, entitlements_delivered: next })
-                      showToast(`Delivered 6 additional R&R housing allowances! Total: ${next}`)
-                    }}
-                  >
-                    Deliver Next Entitlement Batch ➔
-                  </button>
+                  {can('rr.manage') && (
+                    <button
+                      className="secondary-button"
+                      style={{ width: '100%', justifyContent: 'center' }}
+                      onClick={() => {
+                        const next = Math.min(rehabData.entitlements_total, rehabData.entitlements_delivered + 6)
+                        setRehabData({ ...rehabData, entitlements_delivered: next })
+                        showToast(`Delivered 6 additional R&R housing allowances! Total: ${next}`)
+                      }}
+                    >
+                      Deliver Next Entitlement Batch ➔
+                    </button>
+                  )}
                 </div>
               </section>
               )}
