@@ -23,7 +23,6 @@ export default defineConfig({
       '/ready': apiProxy,
       '/readiness': apiProxy,
       '/dashboard/kpis': apiProxy,
-      '/dashboard': apiProxy,
       '/projects': apiProxy,
       '/workflow': apiProxy,
       '/departments': apiProxy,
