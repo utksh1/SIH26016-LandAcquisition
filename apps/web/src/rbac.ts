@@ -281,13 +281,25 @@ export const ROLE_ALLOWED_CATEGORIES: Record<string, string[]> = {
     'workflow-regimes',
   ],
 
-  // Panel 1: Central Ministry / Sanctioning Authority / Government Reviewer (oversight)
+  // Panel 1: Central Ministry / Sanctioning Authority / Government Reviewer / Principal Secretary (oversight)
   government_reviewer: [
     'dashboard',
     'projects',
+    'my-tasks',
+    'parcels',
+    'gis-map',
+    'dilrmp',
+    'objections',
+    'awards',
+    'compensation',
+    'payments',
+    'possession',
     'national',
     'analytics',
     'sia',
+    'rr',
+    'deposits',
+    'litigation',
     'audit',
     'workflow-regimes',
     'ai-studio',
@@ -544,6 +556,7 @@ const STAGE_ACTIONS: Record<string, WorkflowAction[]> = {
     { action: 'upload_ror', label: 'Upload RoR', permission: 'document.upload', variant: 'secondary' },
   ],
   land_record_verification: [
+    { action: 'approve', label: 'Approve & Sign RoR Gate', permission: 'transition_projects', variant: 'primary' },
     { action: 'verify', label: 'Verify Parcel', permission: 'parcel.verify', variant: 'primary' },
     { action: 'return', label: 'Return for Correction', permission: 'workflow.reject', variant: 'danger' },
     { action: 'view_documents', label: 'View Documents', permission: 'document.review', variant: 'secondary' },

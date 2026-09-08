@@ -1,6 +1,16 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
+const apiProxy = {
+  target: 'http://127.0.0.1:3000',
+  bypass: (req: any) => {
+    // If browser is requesting an HTML document (SPA page navigation), serve index.html!
+    if (req.headers.accept && req.headers.accept.includes('text/html')) {
+      return '/index.html'
+    }
+  },
+}
+
 export default defineConfig({
   plugins: [react()],
   server: {
@@ -8,28 +18,29 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
     proxy: {
-      '/mock-ehrms': 'http://127.0.0.1:3000',
-      '/health': 'http://127.0.0.1:3000',
-      '/ready': 'http://127.0.0.1:3000',
-      '/readiness': 'http://127.0.0.1:3000',
-      '/dashboard': 'http://127.0.0.1:3000',
-      '/projects': 'http://127.0.0.1:3000',
-      '/workflow': 'http://127.0.0.1:3000',
-      '/departments': 'http://127.0.0.1:3000',
-      '/objections': 'http://127.0.0.1:3000',
-      '/rehabilitation': 'http://127.0.0.1:3000',
-      '/documents': 'http://127.0.0.1:3000',
-      '/alerts': 'http://127.0.0.1:3000',
-      '/parcels': 'http://127.0.0.1:3000',
-      '/deposits': 'http://127.0.0.1:3000',
-      '/audit': 'http://127.0.0.1:3000',
-      '/auth': 'http://127.0.0.1:3000',
-      '/dilrmp': 'http://127.0.0.1:3000',
-      '/pfms': 'http://127.0.0.1:3000',
-      '/analytics': 'http://127.0.0.1:3000',
-      '/integrations': 'http://127.0.0.1:3000',
-      '/ai': 'http://127.0.0.1:3000',
-      '/me': 'http://127.0.0.1:3000',
+      '/mock-ehrms': apiProxy,
+      '/health': apiProxy,
+      '/ready': apiProxy,
+      '/readiness': apiProxy,
+      '/dashboard/kpis': apiProxy,
+      '/dashboard': apiProxy,
+      '/projects': apiProxy,
+      '/workflow': apiProxy,
+      '/departments': apiProxy,
+      '/objections': apiProxy,
+      '/rehabilitation': apiProxy,
+      '/documents': apiProxy,
+      '/alerts': apiProxy,
+      '/parcels': apiProxy,
+      '/deposits': apiProxy,
+      '/audit': apiProxy,
+      '/auth': apiProxy,
+      '/dilrmp': apiProxy,
+      '/pfms': apiProxy,
+      '/analytics': apiProxy,
+      '/integrations': apiProxy,
+      '/ai': apiProxy,
+      '/me': apiProxy,
     },
   },
   preview: {
@@ -38,8 +49,3 @@ export default defineConfig({
     strictPort: true,
   },
 })
-
-// The API client uses mock data whenever VITE_API_URL is unset or blank.
-// Keep API routing explicit: VITE_API_URL should be an origin or base path,
-// without a trailing slash (for example, http://127.0.0.1:8080/api). 
-

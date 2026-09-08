@@ -59,6 +59,18 @@ async fn main() {
         eprintln!("Alerts background job not started: no database pool available.");
     }
     
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{signal, SignalKind};
+        if let Ok(mut sighup) = signal(SignalKind::hangup()) {
+            tokio::spawn(async move {
+                while sighup.recv().await.is_some() {
+                    // Keep running when terminal or parent subshell detaches
+                }
+            });
+        }
+    }
+
     let listener = tokio::net::TcpListener::bind(address)
         .await
         .expect("failed to bind listener");

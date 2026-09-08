@@ -7,7 +7,7 @@ export interface CategoryViewsProps {
   activeCategory: string
   onSelectCategory: (cat: string) => void
   projects: Project[]
-  selected: Project
+  selected: Project | null
   onSelectProject: (p: Project) => void
   activePersona: StakeholderPersona
   onSwitchPersona: (p: StakeholderPersona) => void
@@ -565,7 +565,7 @@ export function CategoryViews({
             </thead>
             <tbody>
               {filteredProjects.map((proj) => {
-                const isSelected = selected.id === proj.id
+                const isSelected = selected ? selected.id === proj.id : false
                 const pct = Math.round((proj.acquired / proj.parcels) * 100)
                 return (
                   <tr
@@ -713,7 +713,7 @@ export function CategoryViews({
                     </span>
                   </div>
                   <h3 style={{ margin: '0 0 4px', fontSize: 16, color: '#001e2b' }}>
-                    {task.project_name || selected.name}
+                    {task.project_name || selected?.name || 'Land Acquisition Project'}
                   </h3>
                   <p style={{ margin: 0, fontSize: 12, color: '#5c6c7a' }}>
                     <strong>Action Required:</strong> Review mandatory statutory clearings, verify DILRMP Jamabandi records, and issue Digital Signature Certificate (DSC) speaking order.
@@ -1177,8 +1177,8 @@ export function CategoryViews({
               <div>
                 <label style={{ fontSize: 12, fontWeight: 600, color: '#1c2d38' }}>Target State Portal</label>
                 <select style={{ width: '100%', height: 38, padding: '0 10px', borderRadius: 8, border: '1px solid #c1ccd6', fontSize: 13, marginTop: 4 }}>
+                  <option>Uttar Pradesh (Bhulekh UP Portal / Varanasi DILRMP)</option>
                   <option>Rajasthan (Apna Khata / E-Dharti DILRMP)</option>
-                  <option>Uttar Pradesh (Bhulekh UP Portal)</option>
                   <option>Karnataka (Bhoomi Land Records)</option>
                   <option>Gujarat (AnyRoR Gateway)</option>
                   <option>Andhra Pradesh (Meebhoomi)</option>
@@ -1190,9 +1190,34 @@ export function CategoryViews({
                   type="text"
                   value={dilrmpSurvey}
                   onChange={(e) => setDilrmpSurvey(e.target.value)}
-                  placeholder="e.g. BH-48-1042"
+                  placeholder="e.g. UP-VNS-1042 / Survey #1042"
                   style={{ width: '100%', height: 38, padding: '0 10px', borderRadius: 8, border: '1px solid #c1ccd6', fontSize: 13, marginTop: 4 }}
                 />
+                <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+                  {[
+                    { survey: 'UP-VNS-1042', label: '#1042 (Asha Devi)' },
+                    { survey: 'UP-VNS-2048', label: '#2048 (Ram Chandra)' },
+                    { survey: 'UP-VNS-3012', label: '#3012 (Vikram Singh)' },
+                  ].map((s) => (
+                    <button
+                      key={s.survey}
+                      type="button"
+                      style={{
+                        padding: '3px 8px',
+                        fontSize: 11,
+                        background: '#f0fdf4',
+                        border: '1px solid #bbf7d0',
+                        borderRadius: 4,
+                        color: '#15803d',
+                        cursor: 'pointer',
+                        fontWeight: 600,
+                      }}
+                      onClick={() => setDilrmpSurvey(s.survey)}
+                    >
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
               </div>
               <button
                 onClick={onDilrmpLookup}
