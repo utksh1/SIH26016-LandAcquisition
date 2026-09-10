@@ -1686,9 +1686,11 @@ export default function App() {
         },
         allowedActions: [],
       })
-      // Fetch task queue
+      // Fetch task queue — pass the role so /me/tasks?role=X returns
+      // the correct tasks for this persona (mock eHRMS has no JWT)
+      const taskRole = personaToRoleCode(activePersona.id)
       setMeTasksLoading(true)
-      apiClient.getMeTasks().then((tasks) => {
+      apiClient.getMeTasks(taskRole).then((tasks) => {
         setMeTasks(tasks)
         setMeTasksLoading(false)
       }).catch(() => {
@@ -1704,7 +1706,8 @@ export default function App() {
 
   // Refresh task queue after a gate action
   const refreshMeTasks = () => {
-    apiClient.getMeTasks().then(setMeTasks).catch(() => {})
+    const roleCode = personaToRoleCode(activePersona.id)
+    apiClient.getMeTasks(roleCode).then(setMeTasks).catch(() => {})
   }
 
   // Handle Citizen (Land Owner) Login

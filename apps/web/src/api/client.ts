@@ -379,7 +379,7 @@ export interface ApiClient {
   // /me family — frontend RBAC layer consumes these (see src/rbac.ts)
   getMe(): Promise<MeResponse>
   getMePermissions(): Promise<MePermissionsResponse>
-  getMeTasks(): Promise<MeTaskItem[]>
+  getMeTasks(role?: string): Promise<MeTaskItem[]>
   getWorkflowHistory(workflowId: string): Promise<ApprovalAction[]>
   listWorkflowRegimes(): Promise<WorkflowRegime[]>
   listDepartments(): Promise<DepartmentInfo[]>
@@ -478,6 +478,7 @@ export const apiPaths = {
   me: '/me',
   mePermissions: '/me/permissions',
   meTasks: '/me/tasks',
+  meTasksForRole: (role: string) => `/me/tasks?role=${encodeURIComponent(role)}`,
   workflowRegimes: '/workflow/regimes',
   workflowStages: '/workflow/stages',
   workflowStage: (code: string) => `/workflow/stages/${encodeURIComponent(code)}`,
@@ -628,7 +629,7 @@ export const apiClient: ApiClient = {
   // /me family — consumed by src/rbac.ts (RbacContext, roleKpiCards, stageWorkflowActions)
   getMe: () => request<MeResponse>('GET', apiPaths.me),
   getMePermissions: () => request<MePermissionsResponse>('GET', apiPaths.mePermissions),
-  getMeTasks: () => request<MeTaskItem[]>('GET', apiPaths.meTasks),
+  getMeTasks: (role?: string) => request<MeTaskItem[]>('GET', role ? apiPaths.meTasksForRole(role) : apiPaths.meTasks),
   getWorkflowHistory: (workflowId: string) =>
     request<ApprovalAction[]>('GET', apiPaths.workflowHistory(workflowId)),
   listWorkflowRegimes: () => request<WorkflowRegime[]>('GET', apiPaths.workflowRegimes),
