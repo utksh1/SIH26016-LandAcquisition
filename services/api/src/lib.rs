@@ -2503,6 +2503,61 @@ async fn reject_workflow_endpoint(
 
     let (workflow_id, project_id, current_stage) = resolve_workflow_and_populate(&state, &id_str).await?;
 
+    // ============================================================
+    // PHASE 2: COURT-STAY GATE (Master PDF §36)
+    // An active court stay blocks ALL stage transitions — forward
+    // AND backward — including rejections / returns to the previous
+    // stage. Unlike approve_workflow_endpoint, we do NOT enforce the
+    // objection-window / declaration / 80%-payment gates here: those
+    // are forward-progress gates and don't apply when a stage is being
+    // returned for revision. Court stay is the only gate that blocks
+    // reverse transitions.
+    //
+    // Runs BEFORE acquiring the in_mem write lock so the DB await on
+    // `litigation_case` doesn't deadlock against any reader.
+    // ============================================================
+    {
+        let project = {
+            let in_mem = state.in_memory.read().unwrap();
+            in_mem.projects.get(&project_id).cloned()
+        };
+        if let Some(_project) = project {
+            // Pull active court stays from litigation_case when a DB pool
+            // is available. Falls back to an empty Vec (no stays) when DB
+            // is unavailable — preserves the no-DB demo-mode behavior.
+            let stays: Vec<(DateTime<Utc>, DateTime<Utc>)> = if let Some(ref pool) = state.pool {
+                sqlx::query(
+                    "SELECT stay_from, stay_to FROM litigation_case
+                     WHERE project_id = $1
+                       AND status = 'stayed'
+                       AND stay_from IS NOT NULL
+                       AND stay_to IS NOT NULL"
+                )
+                .bind(project_id)
+                .fetch_all(pool)
+                .await
+                .unwrap_or_default()
+                .into_iter()
+                .map(|r| {
+                    use sqlx::Row;
+                    let from: DateTime<Utc> = r.try_get("stay_from").unwrap_or_else(|_| Utc::now());
+                    let to: DateTime<Utc> = r.try_get("stay_to").unwrap_or_else(|_| Utc::now() + chrono::Duration::days(365));
+                    (from, to)
+                })
+                .collect()
+            } else {
+                Vec::new()
+            };
+
+            let stay_active = stays.iter().any(|(from, to)| *from <= now && now <= *to);
+            if stay_active {
+                return Err(ApiError::BadRequest(
+                    "Timeline gate failed (court_stay_active): A court stay is currently in effect on this project. No stage transitions (including rejections) may proceed until the stay is vacated.".to_string()
+                ));
+            }
+        }
+    }
+
     // Scope the in-memory write lock so it is released before the audit-log
     // append below — see Task E notes in append_audit_entry_db_and_mem.
     let (
@@ -4673,19 +4728,74 @@ async fn upload_document(
     Ok(Json(record))
 }
 
+/// GET /documents/project/:id?role=<role_code> — lists all documents for a
+/// project filtered by the caller's role-based visibility tier (per Master
+/// PDF §29 DPDP compliance + RBAC spec §11 + migration 011).
+///
+/// The `?role=` query parameter is the role_code of the caller. In
+/// production this should be derived from the Bearer token via
+/// `AuthenticatedActor`; the query param is the same mock-eHRMS demo-mode
+/// fallback used by `/me/tasks`. If omitted, defaults to the most
+/// restrictive set (public + stakeholder only) — i.e. the Land Owner tier.
+///
+/// Visibility matrix (mirrors migration 011 comments + spec §11):
+///   land_owner, land_requiring_body → public, stakeholder
+///   legal_officer                  → all five tiers (incl. legal_privileged)
+///   collector, additional_collector,
+///   government_reviewer             → public, stakeholder, department_only, internal
+///   revenue_officer, gis_officer, sia_officer,
+///   finance_officer, rr_officer     → public, stakeholder, department_only
+///
+/// LEGAL_PRIVILEGED documents NEVER appear to non-legal roles, even if
+/// the role is otherwise a stakeholder. DEPARTMENT_ONLY filtering by
+/// `uploaded_by_department = current_user.department` is not enforced
+/// here (no current_user context in mock mode) — the role-based filter
+/// already narrows the tier; future work will add the department match.
 async fn list_project_documents(
     State(state): State<AppState>,
     Path(project_id): Path<ProjectId>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
 ) -> Result<Json<Vec<DocumentRecord>>, ApiError> {
+    // Determine allowed visibility levels based on the caller's role.
+    // Default (no ?role= or unknown role) is the most restrictive set so a
+    // missing role never leaks internal/legal content (defensive default
+    // per DPDP minimisation principle).
+    let allowed_visibilities: Vec<&str> = match params.get("role").map(|s| s.as_str()) {
+        Some("land_owner") => vec!["public", "stakeholder"],
+        Some("legal_officer") => vec![
+            "public",
+            "stakeholder",
+            "department_only",
+            "internal",
+            "legal_privileged",
+        ],
+        Some("collector") | Some("additional_collector") => {
+            vec!["public", "stakeholder", "department_only", "internal"]
+        }
+        Some("government_reviewer") => {
+            vec!["public", "stakeholder", "department_only", "internal"]
+        }
+        Some("revenue_officer")
+        | Some("gis_officer")
+        | Some("sia_officer")
+        | Some("finance_officer")
+        | Some("rr_officer") => vec!["public", "stakeholder", "department_only"],
+        Some("land_requiring_body") => vec!["public", "stakeholder"],
+        _ => vec!["public", "stakeholder"], // default: most restrictive
+    };
+
     if let Some(ref pool) = state.pool {
         use sqlx::Row;
         let rows = sqlx::query(
-            "SELECT id, project_id, kind, file_name, content_hash, version, coalesce(signed_by, '') as signed_by, created_at
+            "SELECT id, project_id, kind, file_name, content_hash, version, \
+                    coalesce(signed_by, '') as signed_by, created_at, \
+                    visibility::text as visibility
              FROM document
-             WHERE project_id = $1
-             ORDER BY created_at DESC"
+             WHERE project_id = $1 AND visibility::text = ANY($2)
+             ORDER BY created_at DESC",
         )
         .bind(project_id)
+        .bind(&allowed_visibilities)
         .fetch_all(pool)
         .await
         .map_err(|e| ApiError::BadRequest(format!("Failed to list documents: {e}")))?;
@@ -4707,6 +4817,13 @@ async fn list_project_documents(
         return Ok(Json(records));
     }
 
+    // In-memory fallback: documents cached in memory have no `visibility`
+    // field (DocumentRecord predates migration 011), so we cannot apply the
+    // visibility filter at the data layer. We return ALL in-mem documents
+    // matching the project_id to preserve backward compatibility for the
+    // no-DB demo path; the DB path above is the source of truth for any
+    // environment where migration 011 has been applied. This is documented
+    // as a known limitation of the mock path in the worklog.
     let in_mem = state.in_memory.read().unwrap();
     let matches: Vec<DocumentRecord> = in_mem
         .documents
