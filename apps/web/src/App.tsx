@@ -45,7 +45,6 @@ import {
   filterParcelsByJurisdiction,
   canInitiateAcquisitionProposal,
 } from './rbac'
-import { CategoryViews } from './components/CategoryViews'
 
 type IconName =
   | 'grid'
@@ -3438,43 +3437,6 @@ export default function App() {
         </header>
 
         <div className="page-wrap">
-          {activeCategory !== 'dashboard' ? (
-            <CategoryViews
-              activeCategory={activeCategory}
-              onSelectCategory={(cat) => setActiveCategory(cat)}
-              projects={visibleProjects}
-              selected={selected}
-              onSelectProject={(p) => {
-                setSelected(p)
-                setActiveCategory('dashboard')
-              }}
-              activePersona={activePersona}
-              onSwitchPersona={(p) => handleLogin(p)}
-              stakeholderPersonas={stakeholderPersonas}
-              myTasks={myTasks}
-              meTasks={meTasks}
-              onOpenGateReview={() => setShowGateReviewModal(true)}
-              dilrmpSurvey={dilrmpSurvey}
-              setDilrmpSurvey={setDilrmpSurvey}
-              dilrmpResult={dilrmpResult}
-              dilrmpLoading={dilrmpLoading}
-              onDilrmpLookup={handleDilrmpLookup}
-              pfmsBeneficiary={pfmsBeneficiary}
-              setPfmsBeneficiary={setPfmsBeneficiary}
-              pfmsAmountInr={pfmsAmountInr}
-              setPfmsAmountInr={setPfmsAmountInr}
-              pfmsResult={pfmsResult}
-              pfmsLoading={pfmsLoading}
-              onPfmsDisburse={handlePfmsDisburse}
-              auditEntries={auditEntries}
-              auditStats={auditVerification}
-              regimes={regimes}
-              showToast={showToast}
-              can={can}
-              currentStageIdx={currentStageIdx}
-              rfctlarrStages={rfctlarrStages}
-            />
-          ) : (
             <>
               {/* Welcome Banner */}
               <section className="welcome-row">
@@ -5793,7 +5755,6 @@ export default function App() {
             </aside>
           </section>
           </>
-          )}
 
           <footer className="page-footer">
             <span>LandFlow · National Land Acquisition & Management System (NLAMS)</span>
