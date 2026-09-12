@@ -389,7 +389,7 @@ export interface ApiClient {
   getRehabilitation(projectId: string): Promise<RehabilitationInfo>
   updateRehabilitation(projectId: string, entitlementsDelivered: number, status: string): Promise<RehabilitationInfo>
   uploadDocument(payload: { project_id: string; kind: string; file_name: string; signed_by: string }): Promise<DocumentItem>
-  listProjectDocuments(projectId: string): Promise<DocumentItem[]>
+  listProjectDocuments(projectId: string, role?: string): Promise<DocumentItem[]>
   mockEhrmsLogin(employeeId: string): Promise<MockEhrmsLoginResponse>
   listMockEhrmsEmployees(): Promise<EhrmsEmployee[]>
   listWorkflowStages(): Promise<StageDefinition[]>
@@ -642,7 +642,8 @@ export const apiClient: ApiClient = {
   updateRehabilitation: (projectId: string, entitlementsDelivered: number, status: string) =>
     request<RehabilitationInfo>('POST', apiPaths.updateRehabilitation(projectId), { entitlements_delivered: entitlementsDelivered, status }),
   uploadDocument: (body) => request<DocumentItem>('POST', apiPaths.documentUpload, body),
-  listProjectDocuments: (projectId: string) => request<DocumentItem[]>('GET', apiPaths.projectDocuments(projectId)),
+  listProjectDocuments: (projectId: string, role?: string) =>
+    request<DocumentItem[]>('GET', role ? `${apiPaths.projectDocuments(projectId)}?role=${encodeURIComponent(role)}` : apiPaths.projectDocuments(projectId)),
   mockEhrmsLogin: (employeeId: string) =>
     request<MockEhrmsLoginResponse>('POST', apiPaths.ehrmsLogin, { employee_id: employeeId }),
   listMockEhrmsEmployees: () =>
